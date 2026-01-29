@@ -1,103 +1,82 @@
-// src/services/api.ts
-// const BASE_URL = 'http://localhost:3000/api'; // O Backend vai rodar aqui
+import axios from 'axios';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { Appointment, Barber, ServiceItem, Plan, Barbershop, User } from '../types';
 
-// Seus mocks continuam aqui embaixo...
+// ⚠️ IMPORTANTE:
+// No Android Emulator use: 'http://10.0.2.2:8000/api'
+// No iPhone Físico/Simulador: 'http://localhost:8000/api' ou o IP da sua máquina 'http://192.168.x.x:8000/api'
+const BASE_URL = 'http://192.168.0.191/api'; 
 
-/* Aqui acontece a mágica. Vamos criar funções que devolvem esses dados, mas com um pequeno atraso (delay) para simular a internet. */
-import type { Barber, ServiceItem, Appointment, Plan } from '../types';
-import { MOCK_BARBERS, MOCK_SERVICES, MOCK_APPOINTMENTS, MOCK_PLANS, MOCK_SHOP_CONFIG } from './mocks';
+export const apiClient = axios.create({
+  baseURL: BASE_URL,
+  headers: {
+    'Content-Type': 'application/json',
+    'Accept': 'application/json',
+  },
+});
 
-const delay = () => new Promise(resolve => setTimeout(resolve, 500));
+// Interceptor: Injeta o Token automaticamente em toda requisição
+apiClient.interceptors.request.use(async (config) => {
+  const token = await AsyncStorage.getItem('@BarberSaaS:token');
+  if (token) {
+    config.headers.Authorization = `Bearer ${token}`;
+  }
+  return config;
+});
 
-let MOCK_SUBSCRIPTION = {
-  planId: 'vip',
-  status: 'active',
-  nextBillingDate: '2026-02-28'
-};
-
-
+// Funções da API
 export const api = {
-  getBarbers: async (): Promise<Barber[]> => {
-    await delay();
-    return MOCK_BARBERS;
+  // 1. Buscar dados da Barbearia pelo Slug (Tela de Entrada)
+// 1. Buscar dados da Barbearia pelo Slug (Tela de Entrada)
+  getBarbershop: async (slug: string): Promise<Barbershop> => {
+    // CORREÇÃO: Removemos o "/barbershop" pois sua rota no Laravel é direta "/{slug}"
+    const { data } = await apiClient.get(`/${slug}`);
+    return data;
   },
 
-  // Buscar serviços
-  getServices: async (): Promise<ServiceItem[]> => {
-    await delay();
-    return MOCK_SERVICES;
+  // 2. Buscar Barbeiros (Público)
+  getBarbers: async (slug: string): Promise<Barber[]> => {
+    const { data } = await apiClient.get(`/${slug}/barbers`);
+    return data.data; 
   },
 
-  // Buscar agendamentos do usuário logado
-  getMyAppointments: async (): Promise<Appointment[]> => {
-    await delay();
-    // Aqui estamos filtrando na memória, no real seria: /appointments?userId=...
-    return MOCK_APPOINTMENTS;
+  // 3. Buscar Serviços (Público)
+  getServices: async (slug: string): Promise<ServiceItem[]> => {
+    const { data } = await apiClient.get(`/${slug}/services`);
+    return data;
   },
 
-  getAvailableSlots: async (date: string, barberId: string): Promise<string[]> => {
-    await delay();
-    // Simula que o backend calculou os horários livres
-    return ['09:00', '10:00', '13:00', '14:30', '16:00', '19:00'];
-  },
-  
-  getPlans: async (): Promise<Plan[]> => {
-    await delay();
-    return MOCK_PLANS;
+  // 4. Buscar Horários Livres
+  getAvailableSlots: async (slug: string, date: string, barberId: number, serviceId: number): Promise<string[]> => {
+    const { data } = await apiClient.get(`/${slug}/slots`, {
+      params: { date, barber_id: barberId, service_id: serviceId }
+    });
+    return data;
   },
 
-  // 1. Busca a assinatura atual
-  getSubscription: async () => {
-    await delay();
-    // Retorna null se não tiver plano ou se estiver cancelado
-    if (!MOCK_SUBSCRIPTION || MOCK_SUBSCRIPTION.status === 'canceled') return null;
-    return MOCK_SUBSCRIPTION;
+  // 5. Autenticação
+  login: async (credentials: any) => {
+    const { data } = await apiClient.post('/login', credentials);
+    return data; // Espera retornar { user, token }
   },
 
-  getShopConfig: async () => {
-    // Simula delay de rede
-    await new Promise(resolve => setTimeout(resolve, 500)); 
-    return MOCK_SHOP_CONFIG;
+  register: async (userData: any) => {
+    const { data } = await apiClient.post('/register', userData);
+    return data;
   },
 
-  // --------------------------------------
-
-  createAppointment: async (data: Omit<Appointment, 'id' | 'status'>): Promise<Appointment> => {
-    await delay();
-    const newAppointment: Appointment = {
-      ...data,
-      id: Math.random().toString(36).substr(2, 9),
-      status: 'pendente'
-    };
-    // Adiciona na lista local (memória temporária)
-    MOCK_APPOINTMENTS.push(newAppointment);
-    return newAppointment;
+  // 6. Agendamentos
+  createAppointment: async (payload: any): Promise<Appointment> => {
+    const { data } = await apiClient.post('/appointments', payload);
+    return data.appointment;
   },
 
-  cancelAppointment: async (appointmentId: string): Promise<void> => {
-    await delay();
-    // Encontra o agendamento na memória e muda o status
-    const appIndex = MOCK_APPOINTMENTS.findIndex(a => a.id === appointmentId);
-    if (appIndex >= 0) {
-      MOCK_APPOINTMENTS[appIndex].status = 'cancelado';
-    } else {
-      throw new Error('Agendamento não encontrado');
-    }
+  getMyAppointments: async (): Promise<{ upcoming: Appointment[], history: Appointment[] }> => {
+    const { data } = await apiClient.get('/appointments');
+    return data; 
   },
 
-  cancelSubscription: async () => {
-    await delay();
-    MOCK_SUBSCRIPTION.status = 'canceled';
-    return;
-  },
-
-  subscribeToPlan: async (planId: string, paymentMethod: string) => {
-    await delay();
-    // Reativa ou cria nova assinatura
-    MOCK_SUBSCRIPTION = {
-      planId,
-      status: 'active',
-      nextBillingDate: '2026-02-28'
-    };
+  cancelAppointment: async (id: number): Promise<void> => {
+    await apiClient.delete(`/appointments/${id}`);
   }
 };

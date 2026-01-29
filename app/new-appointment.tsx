@@ -1,14 +1,21 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Image, ActivityIndicator, Alert } from 'react-native';
-import { useRouter } from 'expo-router';
+import { useRouter, useFocusEffect } from 'expo-router'; // <--- Importei o useFocusEffect
 import { ArrowLeft, Scissors, User, Calendar, Clock, CheckCircle, ChevronRight } from 'lucide-react-native';
 import { api } from '../src/services/api';
 import { useTheme } from '../src/contexts/ThemeContext';
+import { useAuth } from '../src/contexts/AuthContext'; // <--- Importei o Contexto de Auth
 import { Barber, ServiceItem } from '../src/types';
 
 export default function NewAppointment() {
   const router = useRouter();
   const { theme } = useTheme();
+  const { shop, user } = useAuth(); // <--- Pegamos a Barbearia e o Usuário logado aqui
+
+  // ADICIONE ISSO PARA DEBUGAR
+  console.log("--- DEBUG NEW APPOINTMENT ---");
+  console.log("Objeto Shop:", shop);
+  console.log("Slug sendo usado:", shop?.slug);
 
   // Estados de Dados
   const [services, setServices] = useState<ServiceItem[]>([]);
@@ -20,37 +27,51 @@ export default function NewAppointment() {
   // Estados de Controle (O Wizard)
   const [step, setStep] = useState(1);
   const [selectedService, setSelectedService] = useState<ServiceItem | null>(null);
-  const [selectedBarber, setSelectedBarber] = useState<Barber | null>(null); // null = "Qualquer um" se quiser implementar lógica de 'any'
+  const [selectedBarber, setSelectedBarber] = useState<Barber | null>(null);
   const [selectedDate, setSelectedDate] = useState<string>('');
   const [selectedTime, setSelectedTime] = useState<string>('');
 
   // 1. Carrega Serviços e Barbeiros ao abrir
-  useEffect(() => {
-    async function loadData() {
-      try {
-        const [sData, bData] = await Promise.all([api.getServices(), api.getBarbers()]);
-        setServices(sData);
-        setBarbers(bData);
-      } catch (err) {
-        Alert.alert("Erro", "Não foi possível carregar os dados.");
-      } finally {
-        setLoading(false);
+  useFocusEffect(
+    useCallback(() => {
+      async function loadData() {
+        // ⚠️ FIX PROVISÓRIO: Se shop.slug for nulo, usa o nosso fixo
+        const slugCorreto = shop?.slug || "victor-azambuja";
+
+        try {
+          console.log("--- DEBUG ---");
+          console.log("Buscando dados para:", slugCorreto);
+
+          const barbersData = await api.getBarbers(slugCorreto);
+          setBarbers(barbersData);
+
+          const servicesData = await api.getServices(slugCorreto);
+          setServices(servicesData);
+
+        } catch (error) {
+          console.log("Erro ao carregar dados:", error);
+          Alert.alert("Erro", "Falha ao carregar barbeiros.");
+        } finally {
+          setLoading(false); // Importante: tira o loading aconteça o que acontecer
+        }
       }
-    }
-    loadData();
-  }, []);
+
+      loadData();
+    }, [shop])
+  );
 
   // 2. Carrega horários quando muda data ou barbeiro
   useEffect(() => {
-    if (step === 3 && selectedDate && selectedBarber) {
-      setSlots([]); // Limpa para dar feedback visual
-      api.getAvailableSlots(selectedDate, selectedBarber.id).then(data => {
-        setSlots(data);
-      });
+    if (step === 3 && selectedDate && selectedBarber && shop?.slug) {
+      setSlots([]);
+      // Passamos o Slug, Data e ID do Barbeiro
+      api.getAvailableSlots(shop.slug, selectedDate, selectedBarber.id)
+        .then(data => setSlots(data))
+        .catch(err => console.log("Erro slots:", err));
     }
-  }, [selectedDate, selectedBarber, step]);
+  }, [selectedDate, selectedBarber, step, shop?.slug]);
 
-  // Helper: Gera os próximos 14 dias para o scroll horizontal
+  // Helper: Gera os próximos 14 dias
   const generateNextDays = () => {
     const dates = [];
     const today = new Date();
@@ -58,7 +79,7 @@ export default function NewAppointment() {
       const d = new Date(today);
       d.setDate(today.getDate() + i);
       dates.push({
-        fullDate: d.toISOString().split('T')[0], // 2023-10-25
+        fullDate: d.toISOString().split('T')[0],
         day: d.getDate(),
         weekDay: d.toLocaleDateString('pt-BR', { weekday: 'short' }).replace('.', ''),
       });
@@ -72,9 +93,8 @@ export default function NewAppointment() {
   function handleNext() {
     if (step === 1 && selectedService) setStep(2);
     else if (step === 2 && selectedBarber) {
-        // Seleciona automaticamente hoje ao entrar no passo 3
-        if (!selectedDate) setSelectedDate(nextDays[0].fullDate); 
-        setStep(3);
+      if (!selectedDate) setSelectedDate(nextDays[0].fullDate);
+      setStep(3);
     }
     else if (step === 3 && selectedDate && selectedTime) setStep(4);
   }
@@ -85,13 +105,15 @@ export default function NewAppointment() {
   }
 
   async function handleConfirm() {
+    if (!shop?.slug || !user) return; // Segurança extra
+
     setSubmitting(true);
     try {
-      // Cria a data completa ISO
       const fullDateISO = `${selectedDate}T${selectedTime}:00`;
-      
+
       await api.createAppointment({
-        userId: '1', // Fixo por enquanto
+        // userId: user.id.toString(), // Descomente se o backend esperar string
+        userId: user.id, // Envia o ID real do usuário logado
         barberId: selectedBarber!.id,
         serviceId: selectedService!.id,
         date: fullDateISO,
@@ -102,7 +124,8 @@ export default function NewAppointment() {
         { text: "OK", onPress: () => router.replace('/(tabs)/agenda') }
       ]);
     } catch (error) {
-      Alert.alert("Erro", "Falha ao agendar.");
+      console.log(error);
+      Alert.alert("Erro", "Falha ao agendar. Tente novamente.");
       setSubmitting(false);
     }
   }
@@ -111,7 +134,7 @@ export default function NewAppointment() {
 
   return (
     <View style={[styles.container, { backgroundColor: theme.background }]}>
-      
+
       {/* HEADER */}
       <View style={styles.header}>
         <TouchableOpacity onPress={handleBack} style={styles.backButton}>
@@ -123,30 +146,30 @@ export default function NewAppointment() {
           {step === 3 && 'Data e Horário'}
           {step === 4 && 'Confirmar'}
         </Text>
-        <View style={{ width: 24 }} /> 
+        <View style={{ width: 24 }} />
       </View>
 
       {/* BARRA DE PROGRESSO */}
       <View style={styles.progressContainer}>
         {[1, 2, 3, 4].map((s) => (
-          <View 
-            key={s} 
+          <View
+            key={s}
             style={[
-              styles.progressDot, 
+              styles.progressDot,
               { backgroundColor: step >= s ? theme.primary : '#e2e8f0', flex: step >= s ? 2 : 1 }
-            ]} 
+            ]}
           />
         ))}
       </View>
 
       <ScrollView contentContainerStyle={styles.content}>
-        
+
         {/* PASSO 1: SERVIÇOS */}
         {step === 1 && services.map(service => (
-          <TouchableOpacity 
-            key={service.id} 
+          <TouchableOpacity
+            key={service.id}
             style={[
-              styles.card, 
+              styles.card,
               selectedService?.id === service.id && { borderColor: theme.primary, borderWidth: 2 }
             ]}
             onPress={() => setSelectedService(service)}
@@ -157,7 +180,10 @@ export default function NewAppointment() {
               </View>
               <View style={{ flex: 1 }}>
                 <Text style={styles.cardTitle}>{service.name}</Text>
-                <Text style={styles.cardSubtitle}>{service.durationMinutes} min • R$ {service.price.toFixed(2)}</Text>
+                <Text style={styles.cardSubtitle}>
+                  {/* Adicionamos Number() para garantir que é numero */}
+                  {service.durationMinutes} min • R$ {Number(service.price).toFixed(2)}
+                </Text>
               </View>
               {selectedService?.id === service.id && <CheckCircle color={theme.primary} size={20} />}
             </View>
@@ -166,10 +192,10 @@ export default function NewAppointment() {
 
         {/* PASSO 2: BARBEIROS */}
         {step === 2 && barbers.map(barber => (
-          <TouchableOpacity 
-            key={barber.id} 
+          <TouchableOpacity
+            key={barber.id}
             style={[
-              styles.card, 
+              styles.card,
               selectedBarber?.id === barber.id && { borderColor: theme.primary, borderWidth: 2 }
             ]}
             onPress={() => setSelectedBarber(barber)}
@@ -178,6 +204,7 @@ export default function NewAppointment() {
               <Image source={{ uri: barber.avatar }} style={styles.avatar} />
               <View style={{ flex: 1 }}>
                 <Text style={styles.cardTitle}>{barber.name}</Text>
+                <Text style={styles.cardSubtitle}>{barber.role}</Text>
               </View>
               {selectedBarber?.id === barber.id && <CheckCircle color={theme.primary} size={20} />}
             </View>
@@ -213,24 +240,29 @@ export default function NewAppointment() {
 
             <Text style={styles.label}>Horários Disponíveis</Text>
             {slots.length === 0 ? (
-                <Text style={{ color: '#94a3b8', textAlign: 'center', marginTop: 20 }}>Carregando horários...</Text>
+              <View style={{ padding: 20, alignItems: 'center' }}>
+                {/* Se não houver horário selecionado ainda, mostra msg amigável */}
+                <Text style={{ color: '#94a3b8' }}>
+                  {selectedDate ? "Carregando ou sem horários..." : "Selecione uma data acima"}
+                </Text>
+              </View>
             ) : (
-                <View style={styles.grid}>
+              <View style={styles.grid}>
                 {slots.map(time => (
-                    <TouchableOpacity
+                  <TouchableOpacity
                     key={time}
                     style={[
-                        styles.timeChip,
-                        selectedTime === time && { backgroundColor: theme.primary, borderColor: theme.primary }
+                      styles.timeChip,
+                      selectedTime === time && { backgroundColor: theme.primary, borderColor: theme.primary }
                     ]}
                     onPress={() => setSelectedTime(time)}
-                    >
+                  >
                     <Text style={[styles.timeText, selectedTime === time && { color: 'white' }]}>
-                        {time}
+                      {time}
                     </Text>
-                    </TouchableOpacity>
+                  </TouchableOpacity>
                 ))}
-                </View>
+              </View>
             )}
           </View>
         )}
@@ -239,7 +271,7 @@ export default function NewAppointment() {
         {step === 4 && (
           <View style={styles.summaryCard}>
             <Text style={styles.summaryTitle}>Resumo do Pedido</Text>
-            
+
             <View style={styles.summaryRow}>
               <Scissors size={20} color={theme.primary} />
               <View>
@@ -273,47 +305,47 @@ export default function NewAppointment() {
             </View>
 
             <View style={styles.divider} />
-            
+
             <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginTop: 10 }}>
-                <Text style={{ fontSize: 18, fontWeight: 'bold' }}>Total</Text>
-                <Text style={{ fontSize: 18, fontWeight: 'bold', color: theme.primary }}>
-                    R$ {selectedService?.price.toFixed(2)}
-                </Text>
+              <Text style={{ fontSize: 18, fontWeight: 'bold' }}>Total</Text>
+              <Text style={{ fontSize: 18, fontWeight: 'bold', color: theme.primary }}>
+                R$ {Number(selectedService?.price).toFixed(2)}
+              </Text>
             </View>
           </View>
         )}
-        
-        {/* Espaço extra pro scroll não ficar atrás do botão */}
+
+        {/* Espaço extra pro scroll */}
         <View style={{ height: 100 }} />
       </ScrollView>
 
-      {/* BOTÃO FLUTUANTE DE CONTINUAR */}
+      {/* BOTÃO FLUTUANTE */}
       <View style={styles.footer}>
-        <TouchableOpacity 
+        <TouchableOpacity
           style={[
-            styles.footerBtn, 
+            styles.footerBtn,
             { backgroundColor: theme.primary },
-            (step === 1 && !selectedService) || (step === 2 && !selectedBarber) || (step === 3 && !selectedTime) 
-            ? { opacity: 0.5 } : { opacity: 1 }
+            (step === 1 && !selectedService) || (step === 2 && !selectedBarber) || (step === 3 && !selectedTime)
+              ? { opacity: 0.5 } : { opacity: 1 }
           ]}
           onPress={step === 4 ? handleConfirm : handleNext}
           disabled={
-            (step === 1 && !selectedService) || 
-            (step === 2 && !selectedBarber) || 
+            (step === 1 && !selectedService) ||
+            (step === 2 && !selectedBarber) ||
             (step === 3 && !selectedTime) ||
             submitting
           }
         >
-            {submitting ? (
-                <ActivityIndicator color="white" />
-            ) : (
-                <>
-                    <Text style={styles.footerBtnText}>
-                        {step === 4 ? 'Confirmar Agendamento' : 'Continuar'}
-                    </Text>
-                    {step < 4 && <ChevronRight color="white" size={20} />}
-                </>
-            )}
+          {submitting ? (
+            <ActivityIndicator color="white" />
+          ) : (
+            <>
+              <Text style={styles.footerBtnText}>
+                {step === 4 ? 'Confirmar Agendamento' : 'Continuar'}
+              </Text>
+              {step < 4 && <ChevronRight color="white" size={20} />}
+            </>
+          )}
         </TouchableOpacity>
       </View>
 
@@ -321,6 +353,7 @@ export default function NewAppointment() {
   );
 }
 
+// ... Styles permanecem iguais aos seus ...
 const styles = StyleSheet.create({
   center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   container: { flex: 1 },
@@ -335,7 +368,7 @@ const styles = StyleSheet.create({
   },
   backButton: { padding: 5 },
   headerTitle: { fontSize: 18, fontWeight: 'bold', color: '#1e293b' },
-  
+
   progressContainer: {
     flexDirection: 'row',
     gap: 8,
@@ -347,11 +380,11 @@ const styles = StyleSheet.create({
     height: 4,
     borderRadius: 2,
   },
-  
+
   content: {
     padding: 20,
   },
-  
+
   // Cards
   card: {
     backgroundColor: 'white',

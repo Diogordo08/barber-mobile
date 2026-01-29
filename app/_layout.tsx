@@ -1,43 +1,62 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react'; // <--- Adicionei useState aqui
 import { View, ActivityIndicator } from 'react-native';
 import { Slot, useRouter, useSegments } from 'expo-router';
 import { AuthProvider, useAuth } from '../src/contexts/AuthContext';
-import { ThemeProvider } from '../src/contexts/ThemeContext'; // Se estiver usando o tema
+import { ThemeProvider } from '../src/contexts/ThemeContext';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import "../global.css";
 
 // Componente Interno: Faz a lógica de proteção de rotas
 function InitialLayout() {
   const { isAuthenticated, loading } = useAuth();
-  const segments = useSegments(); // Pega em qual tela estamos
+  const segments = useSegments();
   const router = useRouter();
+  const [isCheckingSlug, setIsCheckingSlug] = useState(true); // Agora vai funcionar
 
   useEffect(() => {
-    if (loading) return; // Se está carregando o storage, não faz nada ainda
+    async function checkSlug() {
+      try {
+        const slug = await AsyncStorage.getItem('@BarberSaaS:slug');
+        
+        // Lógica de proteção de rota
+        const inAuthGroup = segments[0] === '(auth)';
+        const inWelcome = segments[0] === 'welcome';
 
-    const inAuthGroup = segments[0] === '(auth)'; // Verifica se está na tela de login
+        if (loading) return;
 
-    if (isAuthenticated && !inAuthGroup) {
-    } else if (!isAuthenticated) {
-      if (segments[0] !== 'login') {
-        router.replace('/login');
+        if (!slug && !inWelcome) {
+          // Sem slug -> Tela de Welcome
+          router.replace('/welcome');
+        } else if (slug && !isAuthenticated && segments[0] !== 'login') {
+          // Tem slug mas não tá logado -> Login
+          router.replace('/login');
+        } else if (isAuthenticated && segments[0] === 'login') {
+          // Logado tentando ir pro login -> Home
+          router.replace('/(tabs)');
+        }
+      } catch (error) {
+        console.error("Erro ao verificar slug:", error);
+      } finally {
+        setIsCheckingSlug(false);
       }
     }
+
+    checkSlug();
   }, [isAuthenticated, loading, segments]);
 
-  // Enquanto carrega o Storage (AsyncStorage), mostra um spinner
-  if (loading) {
+  if (loading || isCheckingSlug) {
     return (
-      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
+      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#0f172a' }}>
         <ActivityIndicator size="large" color="#2563eb" />
       </View>
     );
   }
 
-  // Slot é o "Outlet" do Expo Router. Renderiza a rota atual.
   return <Slot />;
 }
 
-// Componente Raiz: Envolve tudo nos Providers
+// Componente Raiz
 export default function RootLayout() {
   return (
     <SafeAreaProvider>

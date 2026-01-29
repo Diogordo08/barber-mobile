@@ -1,60 +1,62 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react'
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { User, AuthContextType } from '../types/Auth' // Certifique-se do caminho
+import { User, AuthContextType } from '../types/Auth';
+import { api } from '../services/api'; // Importante: Importando a API real
 
 const AuthContext = createContext<AuthContextType>({} as AuthContextType)
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null)
-  const [loading, setLoading] = useState(true) // <--- Começa carregando
+  const [loading, setLoading] = useState(true)
 
-  // 1. Ao carregar a tela, verifica se já tem usuário salvo
+  // 1. Ao carregar o App, recupera o usuário salvo
   useEffect(() => {
     async function loadStorageData() {
       try {
         const storedUser = await AsyncStorage.getItem('@BarberSaaS:user')
-        if (storedUser) {
+        const storedToken = await AsyncStorage.getItem('@BarberSaaS:token')
+        
+        if (storedUser && storedToken) {
           setUser(JSON.parse(storedUser))
         }
       } catch (error) {
         console.log('Erro ao carregar usuário', error)
       } finally {
-        // Isso roda sempre, tendo usuário ou não, para liberar a tela
-        setLoading(false) 
+        setLoading(false)
       }
     }
 
     loadStorageData()
   }, [])
 
-  // 2. Função de Login
+  // 2. Login Real (Conectado com Laravel)
   async function signIn(email: string, password: string) {
-    // Simula delay de API
-    await new Promise(resolve => setTimeout(resolve, 1000))
+    try {
+      // Chama a API que configuramos
+      const response = await api.login({ email, password });
+      
+      // O backend retorna { user, token }
+      const { user, token } = response; 
 
-    if (password === '123456') {
-      const fakeUser: User = {
-        id: '1',
-        name: 'Cliente Teste',
-        email: email,
-        avatar: 'https://github.com/shadcn.png'
-      }
-
-      setUser(fakeUser)
-      // É importante usar o await aqui
-      await AsyncStorage.setItem('@BarberSaaS:user', JSON.stringify(fakeUser))
-    } else {
-      throw new Error('Email ou senha inválidos')
+      await AsyncStorage.setItem('@BarberSaaS:token', token);
+      await AsyncStorage.setItem('@BarberSaaS:user', JSON.stringify(user));
+      
+      setUser(user);
+    } catch (error: any) {
+      console.error(error);
+      const message = error.response?.data?.message || 'E-mail ou senha incorretos.';
+      throw new Error(message); // A tela de login vai pegar esse erro
     }
   }
 
-  // 3. Função de Logout
+  // 3. Logout
   async function signOut() {
     setUser(null)
     await AsyncStorage.removeItem('@BarberSaaS:user')
+    await AsyncStorage.removeItem('@BarberSaaS:token')
   }
 
-  // 4. Atualizar Usuário
+  // 4. Atualizar Usuário (A função que estava faltando!)
   async function updateUser(data: Partial<User>) {
     if (!user) return;
 
@@ -70,7 +72,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       signOut, 
       updateUser, 
       isAuthenticated: !!user,
-      loading // Exportando o estado de carregamento
+      loading 
     }}>
       {children}
     </AuthContext.Provider>

@@ -5,6 +5,7 @@ import { Camera, Mail, User, LogOut, ChevronRight, Save, Crown, Shield, HelpCirc
 import { useAuth } from '../../src/contexts/AuthContext';
 import { useTheme } from '../../src/contexts/ThemeContext';
 import { api } from '../../src/services/api';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 export default function Profile() {
   const { user, signOut, updateUser, shop } = useAuth();
@@ -234,6 +235,8 @@ useFocusEffect(
       <Text style={styles.version}>Versão 1.1.0</Text>
       <View style={{ height: 40 }} />
     </ScrollView>
+
+    
   );
 }
 

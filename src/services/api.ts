@@ -1,12 +1,10 @@
 import axios from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { User, Barbershop, Barber, ServiceItem, Appointment } from '../types';
+import { User, Barbershop, Barber, ServiceItem, Appointment } from '../types'; 
 
-// ⚠️ IMPORTANTE: Use o IP que funcionou para você anteriormente (192.168.0.191)
-// Se mudar de rede Wi-Fi, lembre-se de atualizar aqui.
-const BASE_URL = 'http://192.168.0.191/api';
+// ⚠️ CONFIRA SE SEU IP AINDA É ESSE
+const BASE_URL = 'http://192.168.0.191/api'; 
 
-// 1. Criamos a instância do Axios (A "axiosInstance")
 const apiInstance = axios.create({
   baseURL: BASE_URL,
   headers: {
@@ -15,8 +13,7 @@ const apiInstance = axios.create({
   },
 });
 
-// 2. Configuração Mágica (Interceptor)
-// Antes de cada requisição, ele vai no storage, pega o token e anexa no cabeçalho.
+// Interceptor: Injeta o Token automaticamente em toda requisição
 apiInstance.interceptors.request.use(async (config) => {
   const token = await AsyncStorage.getItem('@BarberSaaS:token');
   if (token) {
@@ -25,9 +22,8 @@ apiInstance.interceptors.request.use(async (config) => {
   return config;
 });
 
-// 3. O Objeto API com todas as funções do App
 export const api = {
-
+  
   // --- AUTENTICAÇÃO ---
   login: async (credentials: any) => {
     const response = await apiInstance.post('/login', credentials);
@@ -40,7 +36,8 @@ export const api = {
   },
 
   updateUser: async (data: { name: string; email: string }) => {
-    const response = await apiInstance.put('/user', data); // Requer Auth
+    // Rota: PUT /api/user
+    const response = await apiInstance.put('/user', data);
     return response.data;
   },
 
@@ -60,44 +57,44 @@ export const api = {
     return response.data;
   },
 
+  // 👇 AQUI ESTÃO AS FUNÇÕES QUE FALTAVAM
   getPlans: async (slug: string) => {
     try {
       const response = await apiInstance.get(`/${slug}/plans`);
       return response.data;
-    } catch (e) {
-      return []; // Retorna vazio se der erro
+    } catch (error) {
+      console.log("Erro ao buscar planos", error);
+      return [];
     }
   },
 
   // --- AGENDAMENTOS ---
   getAvailableSlots: async (slug: string, date: string, barberId: string | number) => {
-    // Ex: /victor-azambuja/slots?date=2023-10-01&barber_id=1&service_id=1
-    // (Ajuste os parâmetros conforme seu backend espera)
     const response = await apiInstance.get(`/${slug}/slots`, {
-      params: { date, barber_id: barberId, service_id: 1 } // service_id fixo por enquanto ou passar por parametro
+      params: { date, barber_id: barberId, service_id: 1 } 
     });
     return response.data;
   },
 
   createAppointment: async (data: any) => {
-    const response = await apiInstance.post('/appointments', data); // Requer Auth
+    const response = await apiInstance.post('/appointments', data);
     return response.data;
   },
 
   getMyAppointments: async () => {
-    const response = await apiInstance.get('/appointments'); // Requer Auth
+    const response = await apiInstance.get('/appointments');
     return response.data;
   },
 
-  // --- ASSINATURAS ---
+  // --- ASSINATURAS (CRÍTICO PRO PERFIL) ---
   getSubscription: async () => {
-    // Se o backend ainda não tiver a rota, vai dar erro 404 (menos pior que crashar)
-    // Mas pelo menos a tela abre e você consegue clicar em SAIR.
     try {
+      // Tenta buscar. Se der erro (404 ou 500), retorna null para não travar a tela
       const response = await apiInstance.get('/user/subscription');
       return response.data;
-    } catch (e) {
-      return null; // Retorna nulo se der erro, assim a tela não trava
+    } catch (error) {
+      // Retorna null para o Perfil saber que não tem plano (e não crashar)
+      return null;
     }
   }
 };

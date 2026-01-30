@@ -7,7 +7,7 @@ import { useTheme } from '../../src/contexts/ThemeContext';
 import { api } from '../../src/services/api';
 
 export default function Profile() {
-  const { user, signOut, updateUser } = useAuth();
+  const { user, signOut, updateUser, shop } = useAuth();
   const { theme } = useTheme();
   const router = useRouter();
   const [hasPlan, setHasPlan] = useState(false);
@@ -20,21 +20,35 @@ export default function Profile() {
 
 useFocusEffect(
   useCallback(() => {
-    async function checkSub() {
-      const sub = await api.getSubscription();
-      if (sub) {
-        setHasPlan(true);
-        // Busca nome do plano só pra exibir bonito
-        const plans = await api.getPlans();
-        const p = plans.find(x => x.id === sub.planId);
-        setPlanName(p?.name || 'Plano Ativo');
-      } else {
-        setHasPlan(false);
+      async function checkSub() {
+        try {
+          // Agora essa função existe no api.ts!
+          const sub = await api.getSubscription();
+          
+          if (sub) {
+            setHasPlan(true);
+            
+            // CORREÇÃO: Passar o slug da loja para buscar os planos
+            // Se o shop não estiver carregado, usamos um fallback ou não buscamos
+            if (shop?.slug) {
+                const plans = await api.getPlans(shop.slug);
+                const p = plans.find((x: any) => x.id === sub.planId);
+                setPlanName(p?.name || 'Plano Ativo');
+            } else {
+                setPlanName('Plano Ativo');
+            }
+          } else {
+            setHasPlan(false);
+          }
+        } catch (error) {
+          console.log("Erro ao buscar assinatura:", error);
+          setHasPlan(false);
+        }
       }
-    }
-    checkSub();
-  }, [])
-);
+      
+      checkSub();
+    }, [shop]) // Adicione shop nas dependências
+  );
 
   // Função para Salvar Alterações
   async function handleSave() {

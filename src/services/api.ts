@@ -1,13 +1,13 @@
 import axios from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { Appointment, Barber, ServiceItem, Plan, Barbershop, User } from '../types';
+import { User, Barbershop, Barber, ServiceItem, Appointment } from '../types';
 
-// ⚠️ IMPORTANTE:
-// No Android Emulator use: 'http://10.0.2.2:8000/api'
-// No iPhone Físico/Simulador: 'http://localhost:8000/api' ou o IP da sua máquina 'http://192.168.x.x:8000/api'
-const BASE_URL = 'http://192.168.0.191/api'; 
+// ⚠️ IMPORTANTE: Use o IP que funcionou para você anteriormente (192.168.0.191)
+// Se mudar de rede Wi-Fi, lembre-se de atualizar aqui.
+const BASE_URL = 'http://192.168.0.191/api';
 
-export const apiClient = axios.create({
+// 1. Criamos a instância do Axios (A "axiosInstance")
+const apiInstance = axios.create({
   baseURL: BASE_URL,
   headers: {
     'Content-Type': 'application/json',
@@ -15,8 +15,9 @@ export const apiClient = axios.create({
   },
 });
 
-// Interceptor: Injeta o Token automaticamente em toda requisição
-apiClient.interceptors.request.use(async (config) => {
+// 2. Configuração Mágica (Interceptor)
+// Antes de cada requisição, ele vai no storage, pega o token e anexa no cabeçalho.
+apiInstance.interceptors.request.use(async (config) => {
   const token = await AsyncStorage.getItem('@BarberSaaS:token');
   if (token) {
     config.headers.Authorization = `Bearer ${token}`;
@@ -24,59 +25,79 @@ apiClient.interceptors.request.use(async (config) => {
   return config;
 });
 
-// Funções da API
+// 3. O Objeto API com todas as funções do App
 export const api = {
-  // 1. Buscar dados da Barbearia pelo Slug (Tela de Entrada)
-// 1. Buscar dados da Barbearia pelo Slug (Tela de Entrada)
-  getBarbershop: async (slug: string): Promise<Barbershop> => {
-    // CORREÇÃO: Removemos o "/barbershop" pois sua rota no Laravel é direta "/{slug}"
-    const { data } = await apiClient.get(`/${slug}`);
-    return data;
-  },
 
-  // 2. Buscar Barbeiros (Público)
-  getBarbers: async (slug: string): Promise<Barber[]> => {
-    const { data } = await apiClient.get(`/${slug}/barbers`);
-    return data.data; 
-  },
-
-  // 3. Buscar Serviços (Público)
-  getServices: async (slug: string): Promise<ServiceItem[]> => {
-    const { data } = await apiClient.get(`/${slug}/services`);
-    return data;
-  },
-
-  // 4. Buscar Horários Livres
-  getAvailableSlots: async (slug: string, date: string, barberId: number, serviceId: number): Promise<string[]> => {
-    const { data } = await apiClient.get(`/${slug}/slots`, {
-      params: { date, barber_id: barberId, service_id: serviceId }
-    });
-    return data;
-  },
-
-  // 5. Autenticação
+  // --- AUTENTICAÇÃO ---
   login: async (credentials: any) => {
-    const { data } = await apiClient.post('/login', credentials);
-    return data; // Espera retornar { user, token }
+    const response = await apiInstance.post('/login', credentials);
+    return response.data;
   },
 
-  register: async (userData: any) => {
-    const { data } = await apiClient.post('/register', userData);
-    return data;
+  register: async (data: any) => {
+    const response = await apiInstance.post('/register', data);
+    return response.data;
   },
 
-  // 6. Agendamentos
-  createAppointment: async (payload: any): Promise<Appointment> => {
-    const { data } = await apiClient.post('/appointments', payload);
-    return data.appointment;
+  updateUser: async (data: { name: string; email: string }) => {
+    const response = await apiInstance.put('/user', data); // Requer Auth
+    return response.data;
   },
 
-  getMyAppointments: async (): Promise<{ upcoming: Appointment[], history: Appointment[] }> => {
-    const { data } = await apiClient.get('/appointments');
-    return data; 
+  // --- DADOS DA BARBEARIA (PÚBLICO) ---
+  getBarbershop: async (slug: string): Promise<Barbershop> => {
+    const response = await apiInstance.get(`/${slug}`);
+    return response.data;
   },
 
-  cancelAppointment: async (id: number): Promise<void> => {
-    await apiClient.delete(`/appointments/${id}`);
+  getBarbers: async (slug: string): Promise<Barber[]> => {
+    const response = await apiInstance.get(`/${slug}/barbers`);
+    return response.data;
+  },
+
+  getServices: async (slug: string): Promise<ServiceItem[]> => {
+    const response = await apiInstance.get(`/${slug}/services`);
+    return response.data;
+  },
+
+  getPlans: async (slug: string) => {
+    try {
+      const response = await apiInstance.get(`/${slug}/plans`);
+      return response.data;
+    } catch (e) {
+      return []; // Retorna vazio se der erro
+    }
+  },
+
+  // --- AGENDAMENTOS ---
+  getAvailableSlots: async (slug: string, date: string, barberId: string | number) => {
+    // Ex: /victor-azambuja/slots?date=2023-10-01&barber_id=1&service_id=1
+    // (Ajuste os parâmetros conforme seu backend espera)
+    const response = await apiInstance.get(`/${slug}/slots`, {
+      params: { date, barber_id: barberId, service_id: 1 } // service_id fixo por enquanto ou passar por parametro
+    });
+    return response.data;
+  },
+
+  createAppointment: async (data: any) => {
+    const response = await apiInstance.post('/appointments', data); // Requer Auth
+    return response.data;
+  },
+
+  getMyAppointments: async () => {
+    const response = await apiInstance.get('/appointments'); // Requer Auth
+    return response.data;
+  },
+
+  // --- ASSINATURAS ---
+  getSubscription: async () => {
+    // Se o backend ainda não tiver a rota, vai dar erro 404 (menos pior que crashar)
+    // Mas pelo menos a tela abre e você consegue clicar em SAIR.
+    try {
+      const response = await apiInstance.get('/user/subscription');
+      return response.data;
+    } catch (e) {
+      return null; // Retorna nulo se der erro, assim a tela não trava
+    }
   }
 };

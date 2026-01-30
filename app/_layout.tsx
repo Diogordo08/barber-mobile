@@ -1,3 +1,18 @@
+
+import { cssInterop } from "nativewind";
+import { StyleSheet } from "react-native";
+
+try {
+  // Tenta configurar o modo escuro para evitar o crash na web
+  // @ts-ignore
+  if (StyleSheet.setFlag) {
+     // @ts-ignore
+     StyleSheet.setFlag('darkMode', 'class');
+  }
+} catch (e) {
+  console.log("Erro ao configurar NativeWind", e);
+}
+
 import { useEffect, useState } from 'react'; // <--- Adicionei useState aqui
 import { View, ActivityIndicator } from 'react-native';
 import { Slot, useRouter, useSegments } from 'expo-router';

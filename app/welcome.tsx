@@ -12,38 +12,43 @@ import {
 import { useRouter } from 'expo-router';
 import { api } from '../src/services/api';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useAuth } from '../src/contexts/AuthContext'; // Importando o Contexto
+import { useAuth } from '../src/contexts/AuthContext';
 
 export default function Welcome() {
-  const { selectShop } = useAuth(); // Pegamos a função mágica aqui
+  const { selectShop } = useAuth();
   const [slug, setSlug] = useState('');
   const [loading, setLoading] = useState(false);
   const router = useRouter();
 
-  async function handleFindBarbershop() {
+async function handleFindBarbershop() {
     if (!slug.trim()) {
       Alert.alert("Atenção", "Digite o código da barbearia.");
       return;
     }
 
     try {
-      setLoading(true);
+      setLoading(true); // Começa o loading
       
-      // 1. Busca na API
-      console.log("Buscando barbearia:", slug);
-      const data = await api.getBarbershop(slug.toLowerCase().trim());
+      const cleanSlug = slug.toLowerCase().trim();
+      console.log(`👉 Buscando: ${cleanSlug}`);
       
-      // 2. SALVA NO CONTEXTO (Isso já salva no Storage automaticamente)
+      const data = await api.getBarbershop(cleanSlug);
+      
+      if (!data || !data.id) {
+        throw new Error("Dados inválidos");
+      }
+      
+      // Salva e AGUARDA
       await selectShop(data); 
+      console.log("👉 Salvo! Navegando...");
       
-      // 3. Navega para o Login
+      // ⚠️ MUDANÇA: Usamos replace e NÃO desligamos o loading (pra não piscar)
       router.push('/login');
 
-    } catch (error) {
-      console.log(error);
-      Alert.alert('Erro', 'Barbearia não encontrada. Verifique o código.');
-    } finally {
-      setLoading(false);
+    } catch (error: any) {
+      console.log("❌ Erro:", error);
+      Alert.alert('Erro', 'Barbearia não encontrada.');
+      setLoading(false); // Só desliga o loading se der erro
     }
   }
 
@@ -92,11 +97,10 @@ export default function Welcome() {
   );
 }
 
-// Estilos padronizados (sem depender do Tailwind/NativeWind)
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#0f172a', // Slate 900
+    backgroundColor: '#0f172a',
   },
   content: {
     flex: 1,
@@ -110,7 +114,7 @@ const styles = StyleSheet.create({
   iconBox: {
     width: 80,
     height: 80,
-    backgroundColor: '#2563eb', // Blue 600
+    backgroundColor: '#2563eb',
     borderRadius: 20,
     alignItems: 'center',
     justifyContent: 'center',
@@ -123,7 +127,7 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   subtitle: {
-    color: '#94a3b8', // Slate 400
+    color: '#94a3b8',
     textAlign: 'center',
     marginTop: 8,
     fontSize: 16,
@@ -132,14 +136,14 @@ const styles = StyleSheet.create({
     gap: 16,
   },
   label: {
-    color: '#cbd5e1', // Slate 300
+    color: '#cbd5e1',
     marginBottom: 8,
     fontWeight: '500',
   },
   input: {
-    backgroundColor: '#1e293b', // Slate 800
+    backgroundColor: '#1e293b',
     borderWidth: 1,
-    borderColor: '#334155', // Slate 700
+    borderColor: '#334155',
     borderRadius: 12,
     paddingHorizontal: 16,
     paddingVertical: 14,
@@ -147,7 +151,7 @@ const styles = StyleSheet.create({
     fontSize: 18,
   },
   button: {
-    backgroundColor: '#2563eb', // Blue 600
+    backgroundColor: '#2563eb',
     borderRadius: 12,
     paddingVertical: 16,
     alignItems: 'center',

@@ -1,6 +1,7 @@
 import React, { createContext, useContext, ReactNode } from 'react';
 import { View, ActivityIndicator } from 'react-native';
 import { useAuth } from './AuthContext'; // <--- Importamos o AuthContext
+import { Barbershop } from '../types';
 
 interface ThemeContextType {
   theme: {
@@ -9,16 +10,17 @@ interface ThemeContextType {
     text: string;
     card: string;
   };
+  shop: Barbershop | null;
 }
 
 const ThemeContext = createContext<ThemeContextType>({} as ThemeContextType);
 
 export function ThemeProvider({ children }: { children: ReactNode }) {
-  // Pegamos o shop direto do AuthContext (onde ele já está salvo!)
+  // Agora funciona porque invertemos a ordem no _layout!
   const { shop, loading: authLoading } = useAuth(); 
 
   const theme = {
-    primary: shop?.theme?.primary || '#2563eb', 
+    primary: shop?.primaryColor || '#2563eb', 
     background: '#0f172a', 
     text: '#ffffff',       
     card: '#1e293b'
@@ -33,7 +35,7 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
   }
 
   return (
-    <ThemeContext.Provider value={{ theme }}>
+    <ThemeContext.Provider value={{ theme, shop }}>
       {children}
     </ThemeContext.Provider>
   );

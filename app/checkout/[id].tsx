@@ -1,15 +1,15 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, ActivityIndicator } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { CreditCard, Lock, ArrowLeft, CheckCircle } from 'lucide-react-native';
+import { CreditCard, Lock, ArrowLeft, CheckCircle, AlertCircle } from 'lucide-react-native';
 import { api } from '../../src/services/api';
-import { useTheme } from '../../src/contexts/ThemeContext';
+import { useTheme } from '../../src/contexts/ThemeContext'; // useTheme já nos dá o shop
 import { Plan } from '../../src/types';
 
 export default function Checkout() {
   const { id } = useLocalSearchParams();
   const router = useRouter();
-  const { theme } = useTheme();
+  const { theme, shop } = useTheme(); // Pegamos o shop aqui
 
   const [plan, setPlan] = useState<Plan | null>(null);
   const [loading, setLoading] = useState(false);
@@ -20,11 +20,14 @@ export default function Checkout() {
   const [cardName, setCardName] = useState('');
 
   useEffect(() => {
-    api.getPlans().then(plans => {
-      const found = plans.find(p => p.id === id);
-      setPlan(found || null);
-    });
-  }, [id]);
+    // Só busca se tivermos um slug
+    if (shop?.slug) {
+      api.getPlans(shop.slug).then(plans => {
+        const found = plans.find(p => p.id === id);
+        setPlan(found || null);
+      });
+    }
+  }, [id, shop]); // Adiciona shop como dependência
 
   async function handlePay() {
     // Validação simples
@@ -49,7 +52,12 @@ export default function Checkout() {
     }, 2500);
   }
 
-  if (!plan) return <View style={styles.center}><ActivityIndicator color={theme.primary} /></View>;
+  if (!plan) return (
+    <View style={styles.center}>
+      <ActivityIndicator color={theme.primary} />
+      <Text style={{ marginTop: 10, color: '#64748b' }}>Carregando plano...</Text>
+    </View>
+  );
 
   if (success) return (
     <View style={styles.successContainer}>

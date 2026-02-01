@@ -8,17 +8,20 @@ import { Plan } from '../src/types';
 
 export default function Plans() {
   const router = useRouter();
-  const { theme } = useTheme();
+  const { theme, shop } = useTheme(); // 1. Pegamos o shop aqui
   
   const [plans, setPlans] = useState<Plan[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    api.getPlans().then(data => {
-      setPlans(data);
-      setLoading(false);
-    });
-  }, []);
+    // 2. Só busca se tivermos um slug
+    if (shop?.slug) {
+      api.getPlans(shop.slug).then(data => {
+        setPlans(data);
+        setLoading(false);
+      });
+    }
+  }, [shop]); // 3. Adiciona shop como dependência
 
   if (loading) return <View style={styles.center}><ActivityIndicator color={theme.primary} /></View>;
 

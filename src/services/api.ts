@@ -5,7 +5,7 @@ import { User, Barbershop, Barber, ServiceItem, Appointment } from '../types';
 // ⚠️ CONFIRA SE SEU IP AINDA É ESSE
 const BASE_URL = 'http://192.168.0.191/api'; 
 
-const apiInstance = axios.create({
+export const apiInstance = axios.create({
   baseURL: BASE_URL,
   headers: {
     'Content-Type': 'application/json',
@@ -13,14 +13,9 @@ const apiInstance = axios.create({
   },
 });
 
-// Interceptor: Injeta o Token automaticamente em toda requisição
-apiInstance.interceptors.request.use(async (config) => {
-  const token = await AsyncStorage.getItem('@BarberSaaS:token');
-  if (token) {
-    config.headers.Authorization = `Bearer ${token}`;
-  }
-  return config;
-});
+/* A lógica de interceptação de erros 401 (Unauthorized) foi movida 
+   para o AuthContext para centralizar o controle de autenticação e 
+   evitar dependências circulares e estado inconsistente. */
 
 export const api = {
   
@@ -86,6 +81,12 @@ export const api = {
     return response.data;
   },
 
+  // 👇 NOVA FUNÇÃO: Cancelar Agendamento
+  cancelAppointment: async (id: string) => {
+    const response = await apiInstance.delete(`/appointments/${id}`);
+    return response.data;
+  },
+
   // --- ASSINATURAS (CRÍTICO PRO PERFIL) ---
   getSubscription: async () => {
     try {
@@ -96,5 +97,21 @@ export const api = {
       // Retorna null para o Perfil saber que não tem plano (e não crashar)
       return null;
     }
+  },
+
+  subscribeToPlan: async (planId: string, paymentMethod: string) => {
+    // Rota: POST /api/subscribe
+    const response = await apiInstance.post('/subscribe', {
+      plan_id: planId,
+      payment_method: paymentMethod,
+    });
+    return response.data;
+  },
+
+  cancelSubscription: async () => {
+    // Rota: POST /api/subscribe/cancel
+    // No seu backend, você pode usar uma rota como DELETE /user/subscription
+    const response = await apiInstance.post('/subscribe/cancel');
+    return response.data;
   }
 };

@@ -8,7 +8,7 @@ import { Plan } from '../src/types';
 
 export default function MyPlan() {
   const router = useRouter();
-  const { theme } = useTheme();
+  const { theme, shop } = useTheme(); // 1. Pegamos o shop aqui
   
   const [loading, setLoading] = useState(true);
   const [subscription, setSubscription] = useState<any>(null);
@@ -21,10 +21,12 @@ export default function MyPlan() {
   async function loadData() {
     try {
       const sub = await api.getSubscription();
-      if (sub) {
+      // 2. Só continua se tiver assinatura E o slug da loja
+      if (sub && shop?.slug) {
         setSubscription(sub);
-        const plans = await api.getPlans();
-        const details = plans.find(p => p.id === sub.planId);
+        // 3. Passa o slug para buscar os planos
+        const plans = await api.getPlans(shop.slug);
+        const details = plans.find((p: Plan) => p.id === sub.planId);
         setPlanDetails(details || null);
       } else {
         // Se não tiver plano, volta pro perfil

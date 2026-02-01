@@ -1,9 +1,15 @@
-
 import { cssInterop } from "nativewind";
-import { StyleSheet } from "react-native";
+import { StyleSheet, View, ActivityIndicator } from "react-native";
+import { useEffect, useState } from 'react';
+import { Slot, useRouter, useSegments } from 'expo-router';
+import { AuthProvider, useAuth } from '../src/contexts/AuthContext';
+import { ThemeProvider } from '../src/contexts/ThemeContext';
+import { SafeAreaProvider } from 'react-native-safe-area-context';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import "../global.css";
 
+// Configuração para evitar crash do NativeWind na Web
 try {
-  // Tenta configurar o modo escuro para evitar o crash na web
   // @ts-ignore
   if (StyleSheet.setFlag) {
      // @ts-ignore
@@ -13,41 +19,27 @@ try {
   console.log("Erro ao configurar NativeWind", e);
 }
 
-import { useEffect, useState } from 'react'; // <--- Adicionei useState aqui
-import { View, ActivityIndicator } from 'react-native';
-import { Slot, useRouter, useSegments } from 'expo-router';
-import { AuthProvider, useAuth } from '../src/contexts/AuthContext';
-import { ThemeProvider } from '../src/contexts/ThemeContext';
-import { SafeAreaProvider } from 'react-native-safe-area-context';
-import AsyncStorage from '@react-native-async-storage/async-storage';
-import "../global.css";
-
-// Componente Interno: Faz a lógica de proteção de rotas
+// Componente Interno: Proteção de Rotas
 function InitialLayout() {
   const { isAuthenticated, loading } = useAuth();
   const segments = useSegments();
   const router = useRouter();
-  const [isCheckingSlug, setIsCheckingSlug] = useState(true); // Agora vai funcionar
+  const [isCheckingSlug, setIsCheckingSlug] = useState(true);
 
   useEffect(() => {
     async function checkSlug() {
       try {
-        const slug = await AsyncStorage.getItem('@BarberSaaS:slug');
-        
-        // Lógica de proteção de rota
-        const inAuthGroup = segments[0] === '(auth)';
+        const shopData = await AsyncStorage.getItem('@BarberSaaS:shop');
         const inWelcome = segments[0] === 'welcome';
 
         if (loading) return;
 
-        if (!slug && !inWelcome) {
-          // Sem slug -> Tela de Welcome
+        // Regras de Redirecionamento
+        if (!shopData && !inWelcome) {
           router.replace('/welcome');
-        } else if (slug && !isAuthenticated && segments[0] !== 'login') {
-          // Tem slug mas não tá logado -> Login
+        } else if (shopData && !isAuthenticated && segments[0] !== 'login' && segments[0] !== 'register') {
           router.replace('/login');
         } else if (isAuthenticated && segments[0] === 'login') {
-          // Logado tentando ir pro login -> Home
           router.replace('/(tabs)');
         }
       } catch (error) {
@@ -71,15 +63,16 @@ function InitialLayout() {
   return <Slot />;
 }
 
-// Componente Raiz
 export default function RootLayout() {
   return (
     <SafeAreaProvider>
-      <ThemeProvider>
-        <AuthProvider>
+      {/* 🟢 CORREÇÃO: AuthProvider PRIMEIRO (Pai) */}
+      <AuthProvider>
+        {/* 🟢 ThemeProvider DEPOIS (Filho) */}
+        <ThemeProvider>
           <InitialLayout />
-        </AuthProvider>
-      </ThemeProvider>
+        </ThemeProvider>
+      </AuthProvider>
     </SafeAreaProvider>
   );
 }

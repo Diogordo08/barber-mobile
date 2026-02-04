@@ -2,9 +2,9 @@ import axios from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { User, Barbershop, Barber, ServiceItem, Appointment } from '../types'; 
 
-// ⚠️ CONFIRA SE SEU IP AINDA É ESSE
 const BASE_URL = 'http://192.168.0.191/api'; 
 
+// Exportando para usar no AuthContext
 export const apiInstance = axios.create({
   baseURL: BASE_URL,
   headers: {
@@ -13,9 +13,22 @@ export const apiInstance = axios.create({
   },
 });
 
-/* A lógica de interceptação de erros 401 (Unauthorized) foi movida 
-   para o AuthContext para centralizar o controle de autenticação e 
-   evitar dependências circulares e estado inconsistente. */
+// 👇 INTERCEPTOR MAIS INTELIGENTE
+apiInstance.interceptors.request.use(async (config) => {
+  // 1. Se o Header já tiver Authorization (colocado pelo Login), NÃO mexe!
+  // Isso evita o delay do AsyncStorage e o erro 401 na transição imediata.
+  if (config.headers.Authorization) {
+    return config;
+  }
+
+  // 2. Só busca no disco se não tiver header (ex: ao recarregar o app)
+  const token = await AsyncStorage.getItem('@BarberSaaS:token');
+  if (token) {
+    config.headers.Authorization = `Bearer ${token}`;
+  }
+  
+  return config;
+});
 
 export const api = {
   
@@ -31,12 +44,11 @@ export const api = {
   },
 
   updateUser: async (data: { name: string; email: string }) => {
-    // Rota: PUT /api/user
     const response = await apiInstance.put('/user', data);
     return response.data;
   },
 
-  // --- DADOS DA BARBEARIA (PÚBLICO) ---
+  // --- DADOS PÚBLICOS ---
   getBarbershop: async (slug: string): Promise<Barbershop> => {
     const response = await apiInstance.get(`/${slug}`);
     return response.data;
@@ -52,7 +64,6 @@ export const api = {
     return response.data;
   },
 
-  // 👇 AQUI ESTÃO AS FUNÇÕES QUE FALTAVAM
   getPlans: async (slug: string) => {
     try {
       const response = await apiInstance.get(`/${slug}/plans`);
@@ -64,54 +75,55 @@ export const api = {
   },
 
   // --- AGENDAMENTOS ---
-  getAvailableSlots: async (slug: string, date: string, barberId: string | number) => {
+  getAvailableSlots: async (slug: string, date: string, barberId: number, serviceId: number) => {
     const response = await apiInstance.get(`/${slug}/slots`, {
-      params: { date, barber_id: barberId, service_id: 1 } 
+      params: { 
+        date: date, 
+        barber_id: barberId, 
+        service_id: serviceId 
+      } 
     });
     return response.data;
   },
 
-  createAppointment: async (data: any) => {
-    const response = await apiInstance.post('/appointments', data);
+  createAppointment: async (data: { 
+    barberId: number, 
+    serviceId: number, 
+    dateISO: string, 
+    clientPhone: string 
+  }) => {
+    const payload = {
+      barber_id: data.barberId,
+      service_id: data.serviceId,
+      scheduled_at: data.dateISO,
+      client_phone: data.clientPhone
+    };
+
+    const response = await apiInstance.post('/appointments', payload);
     return response.data;
   },
 
   getMyAppointments: async () => {
     const response = await apiInstance.get('/appointments');
-    return response.data;
+    // Garante que retorna array, mesmo se o backend mudar a estrutura
+    if (response.data.upcoming || response.data.history) {
+        return [...(response.data.upcoming || []), ...(response.data.history || [])];
+    }
+    return response.data; 
   },
 
-  // 👇 NOVA FUNÇÃO: Cancelar Agendamento
-  cancelAppointment: async (id: string) => {
+  cancelAppointment: async (id: string | number) => {
     const response = await apiInstance.delete(`/appointments/${id}`);
     return response.data;
   },
 
-  // --- ASSINATURAS (CRÍTICO PRO PERFIL) ---
+  // --- ASSINATURAS ---
   getSubscription: async () => {
     try {
-      // Tenta buscar. Se der erro (404 ou 500), retorna null para não travar a tela
       const response = await apiInstance.get('/user/subscription');
       return response.data;
     } catch (error) {
-      // Retorna null para o Perfil saber que não tem plano (e não crashar)
       return null;
     }
-  },
-
-  subscribeToPlan: async (planId: string, paymentMethod: string) => {
-    // Rota: POST /api/subscribe
-    const response = await apiInstance.post('/subscribe', {
-      plan_id: planId,
-      payment_method: paymentMethod,
-    });
-    return response.data;
-  },
-
-  cancelSubscription: async () => {
-    // Rota: POST /api/subscribe/cancel
-    // No seu backend, você pode usar uma rota como DELETE /user/subscription
-    const response = await apiInstance.post('/subscribe/cancel');
-    return response.data;
   }
 };

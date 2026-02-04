@@ -1,6 +1,6 @@
 import { User } from './Auth';
 
-export * from './Auth'; // Re-exporta User e AuthContextType para facilitar
+export * from './Auth';
 
 export interface Barbershop {
   id: number;
@@ -23,33 +23,33 @@ export interface Barber {
   bio?: string;
   role?: string;
   rating?: number;
+  barbershop_id?: number; // Adicionado para consistência
 }
 
 export interface ServiceItem {
   id: number;
   name: string;
   price: number | string;
-  duration_minutes: number; // Corrigido para bater com o backend (snake_case)
+  duration_minutes: number; 
   description?: string;
 }
 
 export interface Appointment {
   id: string | number;
-  status: 'confirmed' | 'completed' | 'cancelled';
-  price: number;
-  scheduled_at: string;
-  formatted_date: string;
+  status: 'confirmed' | 'completed' | 'cancelled' | 'no_show';
+  total_price: number; // Backend usa total_price
+  scheduled_at: string; // Backend usa scheduled_at
   
-  // Atualizado para bater com o novo Resource do Laravel
-  barber: {
+  // Dados aninhados que vêm do 'with' do Laravel
+  barber?: {
     name: string;
     avatar: string | null;
   };
-  service: {
+  service?: {
     name: string;
-    duration: string;
+    duration_minutes?: number;
   };
-  barbershop: {
+  barbershop?: {
     name: string;
   };
 }

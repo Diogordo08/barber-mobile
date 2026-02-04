@@ -1,77 +1,64 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Image, ActivityIndicator, Alert } from 'react-native';
-import { useRouter, useFocusEffect } from 'expo-router'; // <--- Importei o useFocusEffect
+import { useRouter, useFocusEffect } from 'expo-router'; 
 import { ArrowLeft, Scissors, User, Calendar, Clock, CheckCircle, ChevronRight } from 'lucide-react-native';
 import { api } from '../src/services/api';
 import { useTheme } from '../src/contexts/ThemeContext';
-import { useAuth } from '../src/contexts/AuthContext'; // <--- Importei o Contexto de Auth
+import { useAuth } from '../src/contexts/AuthContext'; 
 import { Barber, ServiceItem } from '../src/types';
 
 export default function NewAppointment() {
   const router = useRouter();
   const { theme } = useTheme();
-  const { shop, user } = useAuth(); // <--- Pegamos a Barbearia e o Usuário logado aqui
+  const { shop, user } = useAuth(); 
 
-  // ADICIONE ISSO PARA DEBUGAR
-  console.log("--- DEBUG NEW APPOINTMENT ---");
-  console.log("Objeto Shop:", shop);
-  console.log("Slug sendo usado:", shop?.slug);
-
-  // Estados de Dados
   const [services, setServices] = useState<ServiceItem[]>([]);
   const [barbers, setBarbers] = useState<Barber[]>([]);
   const [slots, setSlots] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
 
-  // Estados de Controle (O Wizard)
+  // Estados do Wizard
   const [step, setStep] = useState(1);
   const [selectedService, setSelectedService] = useState<ServiceItem | null>(null);
   const [selectedBarber, setSelectedBarber] = useState<Barber | null>(null);
   const [selectedDate, setSelectedDate] = useState<string>('');
   const [selectedTime, setSelectedTime] = useState<string>('');
 
-  // 1. Carrega Serviços e Barbeiros ao abrir
   useFocusEffect(
     useCallback(() => {
       async function loadData() {
-        // ⚠️ FIX PROVISÓRIO: Se shop.slug for nulo, usa o nosso fixo
-        const slugCorreto = shop?.slug || "victor-azambuja";
-
+        if (!shop?.slug) return;
         try {
-          console.log("--- DEBUG ---");
-          console.log("Buscando dados para:", slugCorreto);
-
-          const barbersData = await api.getBarbers(slugCorreto);
+          const [barbersData, servicesData] = await Promise.all([
+            api.getBarbers(shop.slug),
+            api.getServices(shop.slug)
+          ]);
           setBarbers(barbersData);
-
-          const servicesData = await api.getServices(slugCorreto);
           setServices(servicesData);
-
         } catch (error) {
-          console.log("Erro ao carregar dados:", error);
-          Alert.alert("Erro", "Falha ao carregar barbeiros.");
+          Alert.alert("Erro", "Falha ao carregar dados da barbearia.");
         } finally {
-          setLoading(false); // Importante: tira o loading aconteça o que acontecer
+          setLoading(false);
         }
       }
-
       loadData();
     }, [shop])
   );
 
-  // 2. Carrega horários quando muda data ou barbeiro
+  // Busca horários dinâmicos
   useEffect(() => {
-    if (step === 3 && selectedDate && selectedBarber && shop?.slug) {
+    // Adicionei validação extra para garantir que só chama se tiver tudo
+    if (step === 3 && selectedDate && selectedBarber && selectedService && shop?.slug) {
       setSlots([]);
-      // Passamos o Slug, Data e ID do Barbeiro
-      api.getAvailableSlots(shop.slug, selectedDate, selectedBarber.id)
+      
+      // 🔥 IMPORTANTE: Seu api.ts DEVE aceitar o 4º argumento (serviceId)
+      api.getAvailableSlots(shop.slug, selectedDate, selectedBarber.id, selectedService.id)
         .then(data => setSlots(data))
         .catch(err => console.log("Erro slots:", err));
     }
-  }, [selectedDate, selectedBarber, step, shop?.slug]);
+  }, [selectedDate, selectedBarber, selectedService, step, shop?.slug]);
 
-  // Helper: Gera os próximos 14 dias
   const generateNextDays = () => {
     const dates = [];
     const today = new Date();
@@ -86,10 +73,8 @@ export default function NewAppointment() {
     }
     return dates;
   };
-
   const nextDays = generateNextDays();
 
-  // Navegação do Wizard
   function handleNext() {
     if (step === 1 && selectedService) setStep(2);
     else if (step === 2 && selectedBarber) {
@@ -105,27 +90,28 @@ export default function NewAppointment() {
   }
 
   async function handleConfirm() {
-    if (!shop?.slug || !user) return; // Segurança extra
+    if (!shop?.slug || !user) return;
 
     setSubmitting(true);
     try {
       const fullDateISO = `${selectedDate}T${selectedTime}:00`;
 
+      // 🔥 IMPORTANTE: Seu api.ts deve traduzir esses campos para snake_case
       await api.createAppointment({
-        // userId: user.id.toString(), // Descomente se o backend esperar string
-        userId: user.id, // Envia o ID real do usuário logado
         barberId: selectedBarber!.id,
         serviceId: selectedService!.id,
-        date: fullDateISO,
-        totalPrice: selectedService!.price
+        dateISO: fullDateISO,
+        // @ts-ignore (Caso o Typescript reclame que user não tem phone)
+        clientPhone: user.phone || '11999999999' 
       });
 
-      Alert.alert("Sucesso! 🎉", "Agendamento confirmado.", [
-        { text: "OK", onPress: () => router.replace('/(tabs)/agenda') }
+      Alert.alert("Sucesso! 🎉", "Seu horário foi agendado.", [
+        { text: "Ver Agenda", onPress: () => router.replace('/(tabs)/agenda') }
       ]);
-    } catch (error) {
-      console.log(error);
-      Alert.alert("Erro", "Falha ao agendar. Tente novamente.");
+    } catch (error: any) {
+      console.log(error.response?.data);
+      const msg = error.response?.data?.message || "Falha ao agendar.";
+      Alert.alert("Ops!", msg);
       setSubmitting(false);
     }
   }
@@ -181,8 +167,10 @@ export default function NewAppointment() {
               <View style={{ flex: 1 }}>
                 <Text style={styles.cardTitle}>{service.name}</Text>
                 <Text style={styles.cardSubtitle}>
-                  {/* Adicionamos Number() para garantir que é numero */}
-                  {service.durationMinutes} min • R$ {Number(service.price).toFixed(2)}
+                  {/* 👇 CORREÇÃO: Usar duration_minutes (padrão Laravel) ou durationMinutes (se converteu) */}
+                  {/* Usei a lógica de fallback para garantir */}
+                  {/* @ts-ignore */}
+                  {service.duration_minutes || service.durationMinutes} min • R$ {Number(service.price).toFixed(2)}
                 </Text>
               </View>
               {selectedService?.id === service.id && <CheckCircle color={theme.primary} size={20} />}
@@ -190,6 +178,8 @@ export default function NewAppointment() {
           </TouchableOpacity>
         ))}
 
+        {/* ... (O RESTO DO CÓDIGO PERMANECE IGUAL) ... */}
+        
         {/* PASSO 2: BARBEIROS */}
         {step === 2 && barbers.map(barber => (
           <TouchableOpacity
@@ -225,7 +215,7 @@ export default function NewAppointment() {
                   ]}
                   onPress={() => {
                     setSelectedDate(day.fullDate);
-                    setSelectedTime(''); // Reseta horário ao mudar dia
+                    setSelectedTime('');
                   }}
                 >
                   <Text style={[styles.dateWeek, selectedDate === day.fullDate && { color: 'white' }]}>
@@ -241,7 +231,6 @@ export default function NewAppointment() {
             <Text style={styles.label}>Horários Disponíveis</Text>
             {slots.length === 0 ? (
               <View style={{ padding: 20, alignItems: 'center' }}>
-                {/* Se não houver horário selecionado ainda, mostra msg amigável */}
                 <Text style={{ color: '#94a3b8' }}>
                   {selectedDate ? "Carregando ou sem horários..." : "Selecione uma data acima"}
                 </Text>
@@ -271,7 +260,6 @@ export default function NewAppointment() {
         {step === 4 && (
           <View style={styles.summaryCard}>
             <Text style={styles.summaryTitle}>Resumo do Pedido</Text>
-
             <View style={styles.summaryRow}>
               <Scissors size={20} color={theme.primary} />
               <View>
@@ -279,7 +267,6 @@ export default function NewAppointment() {
                 <Text style={styles.summaryValue}>{selectedService?.name}</Text>
               </View>
             </View>
-
             <View style={styles.summaryRow}>
               <User size={20} color={theme.primary} />
               <View>
@@ -287,7 +274,6 @@ export default function NewAppointment() {
                 <Text style={styles.summaryValue}>{selectedBarber?.name}</Text>
               </View>
             </View>
-
             <View style={styles.summaryRow}>
               <Calendar size={20} color={theme.primary} />
               <View>
@@ -295,7 +281,6 @@ export default function NewAppointment() {
                 <Text style={styles.summaryValue}>{selectedDate.split('-').reverse().join('/')}</Text>
               </View>
             </View>
-
             <View style={styles.summaryRow}>
               <Clock size={20} color={theme.primary} />
               <View>
@@ -303,9 +288,7 @@ export default function NewAppointment() {
                 <Text style={styles.summaryValue}>{selectedTime}</Text>
               </View>
             </View>
-
             <View style={styles.divider} />
-
             <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginTop: 10 }}>
               <Text style={{ fontSize: 18, fontWeight: 'bold' }}>Total</Text>
               <Text style={{ fontSize: 18, fontWeight: 'bold', color: theme.primary }}>
@@ -315,7 +298,6 @@ export default function NewAppointment() {
           </View>
         )}
 
-        {/* Espaço extra pro scroll */}
         <View style={{ height: 100 }} />
       </ScrollView>
 
@@ -353,7 +335,6 @@ export default function NewAppointment() {
   );
 }
 
-// ... Styles permanecem iguais aos seus ...
 const styles = StyleSheet.create({
   center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   container: { flex: 1 },
@@ -368,7 +349,6 @@ const styles = StyleSheet.create({
   },
   backButton: { padding: 5 },
   headerTitle: { fontSize: 18, fontWeight: 'bold', color: '#1e293b' },
-
   progressContainer: {
     flexDirection: 'row',
     gap: 8,
@@ -380,12 +360,9 @@ const styles = StyleSheet.create({
     height: 4,
     borderRadius: 2,
   },
-
   content: {
     padding: 20,
   },
-
-  // Cards
   card: {
     backgroundColor: 'white',
     padding: 15,
@@ -418,8 +395,6 @@ const styles = StyleSheet.create({
     color: '#64748b',
     marginTop: 2,
   },
-
-  // Date & Time
   label: {
     fontSize: 16,
     fontWeight: '600',
@@ -440,7 +415,6 @@ const styles = StyleSheet.create({
   },
   dateWeek: { fontSize: 12, color: '#64748b', textTransform: 'uppercase' },
   dateNumber: { fontSize: 20, fontWeight: 'bold', color: '#1e293b' },
-
   grid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
@@ -459,8 +433,6 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: '#334155',
   },
-
-  // Summary
   summaryCard: {
     backgroundColor: 'white',
     padding: 20,
@@ -471,8 +443,6 @@ const styles = StyleSheet.create({
   summaryLabel: { fontSize: 12, color: '#64748b' },
   summaryValue: { fontSize: 16, fontWeight: 'bold', color: '#1e293b' },
   divider: { height: 1, backgroundColor: '#e2e8f0', marginVertical: 10 },
-
-  // Footer
   footer: {
     position: 'absolute',
     bottom: 0,

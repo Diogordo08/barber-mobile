@@ -64,16 +64,6 @@ export const api = {
     return response.data;
   },
 
-  getPlans: async (slug: string) => {
-    try {
-      const response = await apiInstance.get(`/${slug}/plans`);
-      return response.data;
-    } catch (error) {
-      console.log("Erro ao buscar planos", error);
-      return [];
-    }
-  },
-
   // --- AGENDAMENTOS ---
   getAvailableSlots: async (slug: string, date: string, barberId: number, serviceId: number) => {
     const response = await apiInstance.get(`/${slug}/slots`, {
@@ -125,5 +115,29 @@ export const api = {
     } catch (error) {
       return null;
     }
-  }
+  },
+
+  // Busca os planos da barbearia atual
+  getPlans: async (slug: string) => {
+    try {
+      const response = await apiInstance.get(`/${slug}/plans`);
+      return response.data;
+    } catch (error) {
+      console.log("Erro ao buscar planos:", error);
+      return []; // Retorna array vazio para não quebrar a tela
+    }
+  },
+
+  // Busca detalhes de UM plano específico (para o checkout)
+  getPlanDetails: async (slug: string, planId: string | number) => {
+    const response = await apiInstance.get(`/${slug}/plans/${planId}`);
+    return response.data;
+  },
+
+  // Realiza a assinatura
+  subscribeToPlan: async (data: { plan_id: number; payment_method: string }) => {
+    // POST para /api/subscriptions
+    const response = await apiInstance.post('/subscriptions', data);
+    return response.data;
+  },
 };

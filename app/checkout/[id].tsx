@@ -1,185 +1,180 @@
-import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, ActivityIndicator } from 'react-native';
+import React, { useEffect, useState } from 'react';
+import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator, Alert, ScrollView } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { CreditCard, Lock, ArrowLeft, CheckCircle, AlertCircle } from 'lucide-react-native';
+import { ArrowLeft, CreditCard, Store } from 'lucide-react-native';
 import { api } from '../../src/services/api';
-import { useTheme } from '../../src/contexts/ThemeContext'; // useTheme já nos dá o shop
+import { useTheme } from '../../src/contexts/ThemeContext';
+import { useAuth } from '../../src/contexts/AuthContext';
 import { Plan } from '../../src/types';
 
-export default function Checkout() {
-  const { id } = useLocalSearchParams();
+export default function CheckoutScreen() {
+  const { id } = useLocalSearchParams(); // Pega o ID da URL
   const router = useRouter();
-  const { theme, shop } = useTheme(); // Pegamos o shop aqui
+  const { theme } = useTheme();
+  const { shop } = useAuth();
 
   const [plan, setPlan] = useState<Plan | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [success, setSuccess] = useState(false);
-
-  // Estados do Formulário de Cartão (opcional, só visual por enquanto)
-  const [cardNumber, setCardNumber] = useState('');
-  const [cardName, setCardName] = useState('');
+  const [loading, setLoading] = useState(true);
+  const [submitting, setSubmitting] = useState(false);
+  const [paymentMethod, setPaymentMethod] = useState<'credit_card' | 'store'>('store');
 
   useEffect(() => {
-    // Só busca se tivermos um slug
-    if (shop?.slug) {
-      api.getPlans(shop.slug).then(plans => {
-        const found = plans.find(p => p.id === id);
-        setPlan(found || null);
+    async function fetchPlanDetails() {
+      if (!shop?.slug || !id) return;
+      try {
+        // Busca o plano específico (precisa ter essa rota no backend ou filtrar do getPlans)
+        // Se a rota getDetails não existir, usamos getPlans e filtramos:
+        const plans = await api.getPlans(shop.slug);
+        const found = plans.find((p: Plan) => p.id === Number(id));
+        
+        if (found) {
+          setPlan(found);
+        } else {
+          Alert.alert("Erro", "Plano não encontrado.");
+          router.back();
+        }
+      } catch (error) {
+        Alert.alert("Erro", "Falha ao carregar detalhes.");
+        router.back();
+      } finally {
+        setLoading(false);
+      }
+    }
+    fetchPlanDetails();
+  }, [id, shop]);
+
+  async function handleSubscribe() {
+    if (!plan) return;
+    setSubmitting(true);
+
+    try {
+      await api.subscribeToPlan({
+        plan_id: plan.id,
+        payment_method: paymentMethod // 'store' = Pagar no balcão, 'credit_card' = Gateway
       });
-    }
-  }, [id, shop]); // Adiciona shop como dependência
 
-  async function handlePay() {
-    // Validação simples
-    if (!cardNumber || !cardName) {
-        // Num app real, usaria Alert.alert("Erro", "Preencha os dados do cartão")
-        // Mas vamos deixar passar pra testar
+      Alert.alert("Sucesso! 🎉", `Você assinou o plano ${plan.name}.`, [
+        { text: "OK", onPress: () => router.replace('/(tabs)/perfil') }
+      ]);
+    } catch (error: any) {
+      const msg = error.response?.data?.message || "Erro ao processar assinatura.";
+      Alert.alert("Ops!", msg);
+    } finally {
+      setSubmitting(false);
     }
-
-    setLoading(true);
-    // Simula processamento
-    await new Promise(r => setTimeout(r, 2000));
-    
-    // Envia fixo 'card' como método
-    await api.subscribeToPlan(id as string, 'card');
-    
-    setLoading(false);
-    setSuccess(true);
-    
-    setTimeout(() => {
-      router.dismissAll();
-      router.replace('/(tabs)');
-    }, 2500);
   }
 
-  if (!plan) return (
-    <View style={styles.center}>
-      <ActivityIndicator color={theme.primary} />
-      <Text style={{ marginTop: 10, color: '#64748b' }}>Carregando plano...</Text>
-    </View>
-  );
-
-  if (success) return (
-    <View style={styles.successContainer}>
-      <CheckCircle size={100} color="#10b981" />
-      <Text style={styles.successTitle}>Pagamento Confirmado!</Text>
-      <Text style={styles.successText}>Bem-vindo ao clube {plan.name}.</Text>
-    </View>
-  );
+  if (loading) return <View style={styles.center}><ActivityIndicator color={theme.primary} /></View>;
+  if (!plan) return <View style={styles.center}><Text>Plano não encontrado</Text></View>;
 
   return (
     <View style={[styles.container, { backgroundColor: theme.background }]}>
-      
+      {/* Header */}
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
+        <TouchableOpacity onPress={() => router.back()}>
           <ArrowLeft size={24} color="#1e293b" />
         </TouchableOpacity>
-        <Text style={styles.title}>Pagamento com Cartão</Text>
+        <Text style={styles.title}>Checkout</Text>
+        <View style={{ width: 24 }} />
       </View>
 
-      <ScrollView>
-        {/* Resumo */}
-        <View style={styles.summary}>
-          <Text style={styles.label}>Você está assinando:</Text>
-          <View style={styles.rowBetween}>
-            <Text style={styles.planName}>{plan.name}</Text>
-            <Text style={[styles.price, { color: theme.primary }]}>R$ {plan.price.toFixed(2)}</Text>
-          </View>
-        </View>
-
-        {/* Formulário Único (Só Cartão) */}
-        <Text style={styles.sectionTitle}>Dados do Cartão</Text>
+      <ScrollView contentContainerStyle={styles.content}>
         
-        <View style={styles.form}>
-            <View style={styles.inputContainer}>
-                <CreditCard size={20} color="#94a3b8" style={{ marginRight: 10 }} />
-                <TextInput 
-                    style={styles.input} 
-                    placeholder="Número do Cartão" 
-                    keyboardType="numeric"
-                    value={cardNumber}
-                    onChangeText={setCardNumber}
-                />
-            </View>
-
-            <View style={{ flexDirection: 'row', gap: 10 }}>
-              <View style={[styles.inputContainer, { flex: 1 }]}>
-                  <TextInput style={styles.input} placeholder="MM/AA" keyboardType="numeric" maxLength={5} />
-              </View>
-              <View style={[styles.inputContainer, { flex: 1 }]}>
-                  <TextInput style={styles.input} placeholder="CVV" keyboardType="numeric" maxLength={3} />
-              </View>
-            </View>
-
-            <View style={styles.inputContainer}>
-                <TextInput 
-                    style={styles.input} 
-                    placeholder="Nome Impresso no Cartão" 
-                    value={cardName}
-                    onChangeText={setCardName}
-                    autoCapitalize="characters"
-                />
-            </View>
+        {/* Resumo do Plano */}
+        <View style={styles.summaryCard}>
+          <Text style={styles.label}>Você está assinando:</Text>
+          <Text style={styles.planName}>{plan.name}</Text>
+          <Text style={[styles.planPrice, { color: theme.primary }]}>
+            R$ {Number(plan.price).toFixed(2)}
+            <Text style={{ fontSize: 14, color: '#64748b' }}>/mês</Text>
+          </Text>
+          <View style={styles.divider} />
+          <Text style={styles.description}>{plan.description || "Sem descrição"}</Text>
         </View>
+
+        {/* Método de Pagamento */}
+        <Text style={styles.sectionTitle}>Forma de Pagamento</Text>
+        
+        <TouchableOpacity 
+          style={[styles.methodCard, paymentMethod === 'store' && { borderColor: theme.primary, backgroundColor: '#f0f9ff' }]}
+          onPress={() => setPaymentMethod('store')}
+        >
+          <Store size={24} color={paymentMethod === 'store' ? theme.primary : '#64748b'} />
+          <View style={{ flex: 1 }}>
+            <Text style={styles.methodTitle}>Pagar na Barbearia</Text>
+            <Text style={styles.methodDesc}>Ative agora e pague no balcão.</Text>
+          </View>
+          {paymentMethod === 'store' && <View style={[styles.radio, { backgroundColor: theme.primary }]} />}
+        </TouchableOpacity>
+
+        <TouchableOpacity 
+          style={[styles.methodCard, paymentMethod === 'credit_card' && { borderColor: theme.primary, backgroundColor: '#f0f9ff' }]}
+          onPress={() => setPaymentMethod('credit_card')}
+        >
+          <CreditCard size={24} color={paymentMethod === 'credit_card' ? theme.primary : '#64748b'} />
+          <View style={{ flex: 1 }}>
+            <Text style={styles.methodTitle}>Cartão de Crédito</Text>
+            <Text style={styles.methodDesc}>Cobrança recorrente automática.</Text>
+          </View>
+          {paymentMethod === 'credit_card' && <View style={[styles.radio, { backgroundColor: theme.primary }]} />}
+        </TouchableOpacity>
 
       </ScrollView>
 
-      {/* Botão Fixo */}
+      {/* Footer */}
       <View style={styles.footer}>
         <TouchableOpacity 
-          style={[styles.payButton, { backgroundColor: theme.primary }]}
-          onPress={handlePay}
-          disabled={loading}
+          style={[styles.confirmBtn, { backgroundColor: theme.primary }]}
+          onPress={handleSubscribe}
+          disabled={submitting}
         >
-          {loading ? (
+          {submitting ? (
             <ActivityIndicator color="white" />
           ) : (
-            <>
-              <Lock size={18} color="white" />
-              <Text style={styles.payText}>
-                Pagar R$ {plan.price.toFixed(2)}
-              </Text>
-            </>
+            <Text style={styles.confirmBtnText}>Confirmar e Assinar</Text>
           )}
         </TouchableOpacity>
-        <Text style={styles.secureText}>Ambiente criptografado e seguro 🔒</Text>
       </View>
-
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-  container: { flex: 1, padding: 20, paddingTop: 60 },
-  header: { flexDirection: 'row', alignItems: 'center', marginBottom: 20 },
-  backBtn: { marginRight: 15 },
-  title: { fontSize: 20, fontWeight: 'bold', color: '#1e293b' },
+  container: { flex: 1 },
+  header: {
+    paddingTop: 60, paddingHorizontal: 20, paddingBottom: 20, backgroundColor: 'white',
+    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center'
+  },
+  title: { fontSize: 18, fontWeight: 'bold', color: '#1e293b' },
+  content: { padding: 20 },
   
-  summary: { backgroundColor: 'white', padding: 20, borderRadius: 12, marginBottom: 25 },
-  label: { color: '#64748b', fontSize: 14 },
-  rowBetween: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 5 },
-  planName: { fontSize: 20, fontWeight: 'bold', color: '#1e293b' },
-  price: { fontSize: 20, fontWeight: 'bold' },
-
-  sectionTitle: { fontSize: 16, fontWeight: '600', marginBottom: 15, color: '#334155' },
-
-  form: { gap: 15 },
-  inputContainer: { 
-    flexDirection: 'row', alignItems: 'center',
-    backgroundColor: 'white', paddingHorizontal: 15, borderRadius: 8, borderWidth: 1, borderColor: '#e2e8f0', height: 50
+  summaryCard: {
+    backgroundColor: 'white', padding: 20, borderRadius: 16, marginBottom: 30,
+    borderWidth: 1, borderColor: '#e2e8f0'
   },
-  input: { flex: 1, fontSize: 16, height: '100%' },
+  label: { color: '#64748b', marginBottom: 5 },
+  planName: { fontSize: 24, fontWeight: 'bold', color: '#1e293b' },
+  planPrice: { fontSize: 28, fontWeight: 'bold', marginVertical: 5 },
+  divider: { height: 1, backgroundColor: '#e2e8f0', marginVertical: 15 },
+  description: { color: '#334155', lineHeight: 20 },
 
-  footer: { marginTop: 20 },
-  payButton: { 
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10,
-    padding: 16, borderRadius: 12, elevation: 2 
+  sectionTitle: { fontSize: 18, fontWeight: 'bold', color: '#1e293b', marginBottom: 15 },
+  
+  methodCard: {
+    flexDirection: 'row', alignItems: 'center', gap: 15,
+    backgroundColor: 'white', padding: 20, borderRadius: 12, marginBottom: 15,
+    borderWidth: 1, borderColor: '#e2e8f0'
   },
-  payText: { color: 'white', fontWeight: 'bold', fontSize: 18 },
-  secureText: { textAlign: 'center', color: '#cbd5e1', fontSize: 12, marginTop: 15 },
+  methodTitle: { fontSize: 16, fontWeight: 'bold', color: '#1e293b' },
+  methodDesc: { fontSize: 13, color: '#64748b' },
+  radio: { width: 12, height: 12, borderRadius: 6 },
 
-  successContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: 'white' },
-  successTitle: { fontSize: 24, fontWeight: 'bold', marginTop: 20, color: '#1e293b' },
-  successText: { color: '#64748b', marginTop: 5 },
+  footer: {
+    padding: 20, backgroundColor: 'white', borderTopWidth: 1, borderTopColor: '#f1f5f9'
+  },
+  confirmBtn: {
+    height: 56, borderRadius: 12, justifyContent: 'center', alignItems: 'center'
+  },
+  confirmBtnText: { color: 'white', fontSize: 18, fontWeight: 'bold' }
 });

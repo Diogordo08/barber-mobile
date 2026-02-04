@@ -57,7 +57,7 @@ export interface Appointment {
 export interface Plan {
   id: number;
   name: string;
-  price: number;
-  monthly_limit: number;
-  description: string;
+  price: number | string; // Pode vir como string "50.00" do banco
+  description: string | null;
+  cuts_per_month: number | null; // Limite de cortes por mês (null = ilimitado)
 }

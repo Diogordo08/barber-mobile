@@ -1,7 +1,7 @@
 import React, { useState, useCallback } from 'react';
-import { View, Text, StyleSheet, FlatList, TouchableOpacity, ActivityIndicator, RefreshControl, Alert } from 'react-native';
+import { View, Text, StyleSheet, FlatList, TouchableOpacity, ActivityIndicator, RefreshControl, Alert, Platform } from 'react-native';
 import { useFocusEffect, useRouter } from 'expo-router';
-import { Calendar, Clock, MapPin, User, AlertCircle } from 'lucide-react-native';
+import { Calendar, Clock, MapPin, User, AlertCircle, XCircle } from 'lucide-react-native';
 import { api } from '../../src/services/api';
 import { useTheme } from '../../src/contexts/ThemeContext';
 import { Appointment } from '../../src/types';
@@ -18,9 +18,6 @@ export default function AgendaScreen() {
   async function fetchAppointments() {
     try {
       const data = await api.getMyAppointments();
-      console.log("Agenda Recebida:", JSON.stringify(data, null, 2)); // 🔍 Debug no console
-      
-      // Garante que é um array
       const list = Array.isArray(data) ? data : (data.data || []);
       setAppointments(list);
     } catch (error) {
@@ -37,48 +34,65 @@ export default function AgendaScreen() {
     }, [])
   );
 
-  async function handleCancel(id: number) {
-    Alert.alert("Cancelar", "Tem certeza que deseja cancelar este agendamento?", [
-      { text: "Não", style: "cancel" },
-      { 
-        text: "Sim, Cancelar", 
-        style: "destructive", 
-        onPress: async () => {
-          try {
-            await api.cancelAppointment(id);
-            fetchAppointments(); 
-            Alert.alert("Cancelado", "O agendamento foi cancelado.");
-          } catch (error) {
-            Alert.alert("Erro", "Não foi possível cancelar.");
-          }
-        }
-      }
-    ]);
+  // 🚨 Lógica unificada de cancelamento (API)
+  async function executeCancellation(id: number) {
+    try {
+      setLoading(true); // Mostra spinner
+      await api.cancelAppointment(id);
+      
+      // Pequeno delay para garantir que o banco atualizou
+      setTimeout(() => {
+        Alert.alert("Sucesso", "Agendamento cancelado!");
+        fetchAppointments(); 
+      }, 500);
+      
+    } catch (error) {
+      setLoading(false);
+      Alert.alert("Erro", "Não foi possível cancelar.");
+    }
   }
 
-  // 🛠️ FUNÇÃO QUE CORRIGE O BUG DA DATA NO ANDROID
+  // 🚨 Botão Cancelar Híbrido (Funciona na Web e no App)
+  function handleCancel(id: number) {
+    if (Platform.OS === 'web') {
+      // No navegador, usamos o confirm padrão
+      const confirmed = window.confirm("Tem certeza que deseja cancelar este agendamento?");
+      if (confirmed) {
+        executeCancellation(id);
+      }
+    } else {
+      // No celular, usamos o Alert nativo bonito
+      Alert.alert(
+        "Cancelar Agendamento",
+        "Tem certeza que deseja cancelar? Essa ação não pode ser desfeita.",
+        [
+          { text: "Voltar", style: "cancel" },
+          { 
+            text: "Sim, Cancelar", 
+            style: "destructive", 
+            onPress: () => executeCancellation(id) 
+          }
+        ]
+      );
+    }
+  }
+
   const parseDate = (dateString: string) => {
     if (!dateString) return new Date();
-    // Troca espaço por T para o padrão ISO (2026-02-05T14:30:00)
     return new Date(dateString.replace(' ', 'T'));
   };
 
-  // Lógica de Filtro: Próximos vs Histórico
   const now = new Date();
-  
   const filteredData = appointments.filter(app => {
     const appDate = parseDate(app.scheduled_at);
-    
-    // Status que consideramos "ativos" para o futuro
-    const isValidStatus = app.status !== 'cancelled' && app.status !== 'no_show';
+    // Filtramos para não mostrar cancelados na aba de próximos
+    const isActive = !['cancelled', 'no_show', 'completed'].includes(app.status);
     const isFuture = appDate >= now;
 
     if (tab === 'upcoming') {
-      // Mostra se for futuro E não estiver cancelado
-      return isFuture && isValidStatus;
+      return isFuture && isActive;
     } else {
-      // Histórico: Passado OU Cancelado
-      return !isFuture || !isValidStatus;
+      return !isFuture || !isActive;
     }
   }).sort((a, b) => {
     const dateA = parseDate(a.scheduled_at).getTime();
@@ -88,10 +102,10 @@ export default function AgendaScreen() {
 
   const getStatusColor = (status: string) => {
     switch (status) {
-      case 'confirmed': return '#16a34a'; // Verde
-      case 'completed': return '#2563eb'; // Azul
-      case 'cancelled': return '#dc2626'; // Vermelho
-      default: return '#64748b'; // Cinza
+      case 'confirmed': return '#16a34a';
+      case 'completed': return '#2563eb';
+      case 'cancelled': return '#dc2626';
+      default: return '#64748b';
     }
   };
 
@@ -145,7 +159,11 @@ export default function AgendaScreen() {
           <Text style={styles.serviceName}>{item.service?.name}</Text>
           
           {tab === 'upcoming' && item.status !== 'cancelled' && (
-            <TouchableOpacity onPress={() => handleCancel(item.id)}>
+            <TouchableOpacity 
+              style={styles.cancelButton} 
+              onPress={() => handleCancel(item.id)}
+            >
+              <XCircle size={16} color="#dc2626" />
               <Text style={styles.cancelText}>Cancelar</Text>
             </TouchableOpacity>
           )}
@@ -235,6 +253,7 @@ const styles = StyleSheet.create({
   divider: { height: 1, backgroundColor: '#f1f5f9', marginVertical: 10 },
   cardFooter: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   serviceName: { fontWeight: 'bold', color: '#1e293b', fontSize: 16 },
+  cancelButton: { flexDirection: 'row', alignItems: 'center', gap: 5, padding: 5 },
   cancelText: { color: '#dc2626', fontSize: 14, fontWeight: '600' },
   emptyState: { alignItems: 'center', marginTop: 50 }
 });

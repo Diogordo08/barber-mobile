@@ -1,41 +1,72 @@
-import React, { createContext, useContext, ReactNode } from 'react';
-import { View, ActivityIndicator } from 'react-native';
-import { useAuth } from './AuthContext'; // <--- Importamos o AuthContext
-import { Barbershop } from '../types';
+import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import { useColorScheme as useDeviceColorScheme } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
-interface ThemeContextType {
-  theme: {
-    primary: string;
-    background: string;
-    text: string;
-    card: string;
-  };
-  shop: Barbershop | null;
+// Paleta de Cores
+const Colors = {
+  light: {
+    background: '#ffffff',
+    surface: '#f8fafc',       // Cinza muito claro para cards
+    surfaceHighlight: '#e2e8f0',
+    text: '#0f172a',          // Azul noturno quase preto
+    textSecondary: '#64748b', // Cinza médio
+    primary: '#0f172a',       // Botão principal escuro no modo light
+    primaryText: '#ffffff',
+    accent: '#d97706',        // Um tom de âmbar/dourado para detalhes
+    border: '#e2e8f0',
+    error: '#ef4444',
+    success: '#22c55e',
+  },
+  dark: {
+    background: '#0f172a',    // Azul noturno profundo
+    surface: '#1e293b',       // Um pouco mais claro que o fundo
+    surfaceHighlight: '#334155',
+    text: '#f1f5f9',          // Branco gelo
+    textSecondary: '#94a3b8', // Cinza azulado claro
+    primary: '#fbbf24',       // Dourado vibrante para destaque no escuro
+    primaryText: '#0f172a',   // Texto escuro no botão dourado
+    accent: '#fbbf24',
+    border: '#334155',
+    error: '#f87171',
+    success: '#4ade80',
+  }
+};
+
+type ThemeType = typeof Colors.light;
+
+interface ThemeContextData {
+  theme: ThemeType;
+  isDark: boolean;
+  toggleTheme: () => void;
 }
 
-const ThemeContext = createContext<ThemeContextType>({} as ThemeContextType);
+const ThemeContext = createContext<ThemeContextData>({} as ThemeContextData);
 
 export function ThemeProvider({ children }: { children: ReactNode }) {
-  // Agora funciona porque invertemos a ordem no _layout!
-  const { shop, loading: authLoading } = useAuth(); 
+  const deviceScheme = useDeviceColorScheme();
+  const [isDark, setIsDark] = useState(deviceScheme === 'dark');
 
-  const theme = {
-    primary: shop?.primaryColor || '#2563eb', 
-    background: '#0f172a', 
-    text: '#ffffff',       
-    card: '#1e293b'
+  // Carrega preferência salva
+  useEffect(() => {
+    async function loadTheme() {
+      const savedTheme = await AsyncStorage.getItem('@BarberSaaS:theme');
+      if (savedTheme) {
+        setIsDark(savedTheme === 'dark');
+      }
+    }
+    loadTheme();
+  }, []);
+
+  const toggleTheme = async () => {
+    const newMode = !isDark;
+    setIsDark(newMode);
+    await AsyncStorage.setItem('@BarberSaaS:theme', newMode ? 'dark' : 'light');
   };
 
-  if (authLoading) {
-    return (
-      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#0f172a' }}>
-        <ActivityIndicator size="large" color="#2563eb" />
-      </View>
-    );
-  }
+  const theme = isDark ? Colors.dark : Colors.light;
 
   return (
-    <ThemeContext.Provider value={{ theme, shop }}>
+    <ThemeContext.Provider value={{ theme, isDark, toggleTheme }}>
       {children}
     </ThemeContext.Provider>
   );

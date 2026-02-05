@@ -1,166 +1,220 @@
 import React, { useState } from 'react';
 import { 
-  View, 
-  Text, 
-  TextInput, 
-  TouchableOpacity, 
-  ActivityIndicator, 
-  Alert,
-  StyleSheet,
-  StatusBar
+  View, Text, StyleSheet, TouchableOpacity, ImageBackground, StatusBar, 
+  Modal, TextInput, ActivityIndicator, Alert, KeyboardAvoidingView, Platform 
 } from 'react-native';
 import { useRouter } from 'expo-router';
-import { api } from '../src/services/api';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { QrCode, Keyboard, ArrowRight, X } from 'lucide-react-native';
+import { useTheme } from '../src/contexts/ThemeContext';
 import { useAuth } from '../src/contexts/AuthContext';
+import { api } from '../src/services/api';
 
-export default function Welcome() {
-  const { selectShop } = useAuth();
+export default function LandingScreen() {
+  const router = useRouter();
+  const { theme } = useTheme();
+  const { selectShop } = useAuth(); // Importante: Função para salvar a loja escolhida
+
+  const [modalVisible, setModalVisible] = useState(false);
   const [slug, setSlug] = useState('');
   const [loading, setLoading] = useState(false);
-  const router = useRouter();
 
-async function handleFindBarbershop() {
+  // Função para validar e entrar na loja
+  async function handleEnterShop() {
     if (!slug.trim()) {
-      Alert.alert("Atenção", "Digite o código da barbearia.");
+      Alert.alert("Ops!", "Digite o código da barbearia.");
       return;
     }
 
+    setLoading(true);
     try {
-      setLoading(true); // Começa o loading
+      // 1. Busca a barbearia na API pelo slug
+      const shopData = await api.getBarbershop(slug.trim().toLowerCase());
       
-      const cleanSlug = slug.toLowerCase().trim();
-      console.log(`👉 Buscando: ${cleanSlug}`);
-      
-      const data = await api.getBarbershop(cleanSlug);
-      
-      if (!data || !data.id) {
-        throw new Error("Dados inválidos");
+      if (shopData && shopData.id) {
+        // 2. Salva no Contexto (Global)
+        await selectShop(shopData);
+        
+        // 3. Fecha modal e vai para o Login/Welcome
+        setModalVisible(false);
+        router.push('/login'); // Ou '/welcome' se preferir a tela de boas-vindas da loja
+      } else {
+        Alert.alert("Não encontrada", "Nenhuma barbearia encontrada com este código.");
       }
-      
-      // Salva e AGUARDA
-      await selectShop(data); 
-      console.log("👉 Salvo! Navegando...");
-      
-      // ⚠️ MUDANÇA: Usamos replace e NÃO desligamos o loading (pra não piscar)
-      router.push('/login');
-
-    } catch (error: any) {
-      console.log("❌ Erro:", error);
-      Alert.alert('Erro', 'Barbearia não encontrada.');
-      setLoading(false); // Só desliga o loading se der erro
+    } catch (error) {
+      Alert.alert("Erro", "Falha ao buscar barbearia. Verifique o código.");
+    } finally {
+      setLoading(false);
     }
   }
 
-  return (
-    <SafeAreaView style={styles.container}>
-      <StatusBar barStyle="light-content" />
-      
-      <View style={styles.content}>
-        <View style={styles.header}>
-          <View style={styles.iconBox}>
-            <Text style={{ fontSize: 40 }}>✂️</Text>
-          </View>
-          <Text style={styles.title}>Bem-vindo</Text>
-          <Text style={styles.subtitle}>
-            Digite o código da sua barbearia para acessar o agendamento.
-          </Text>
-        </View>
+  function handleScanQr() {
+    // Futuramente aqui você abre a câmera
+    Alert.alert("Em breve", "A funcionalidade de câmera será ativada na próxima atualização.");
+  }
 
-        <View style={styles.form}>
-          <View>
-            <Text style={styles.label}>Código da Barbearia</Text>
+  return (
+    <View style={styles.container}>
+      <StatusBar barStyle="light-content" translucent backgroundColor="transparent" />
+      
+      {/* Fundo Premium */}
+      <ImageBackground 
+        source={{ uri: 'https://images.unsplash.com/photo-1503951914875-452162b0f3f1?q=80&w=2070&auto=format&fit=crop' }} 
+        style={styles.background}
+        resizeMode="cover"
+      >
+        <View style={styles.overlay}>
+          
+          {/* Texto de Boas-vindas */}
+          <View style={styles.header}>
+            <Text style={styles.brand}>BARBER<Text style={{ color: theme.primary }}>SaaS</Text></Text>
+            <Text style={styles.title}>Encontre sua Barbearia</Text>
+            <Text style={styles.subtitle}>
+              Escaneie o QR Code no balcão ou digite o código da barbearia para começar.
+            </Text>
+          </View>
+
+          {/* Botões de Ação */}
+          <View style={styles.actions}>
+            <TouchableOpacity style={styles.cardBtn} onPress={handleScanQr}>
+              <View style={[styles.iconBox, { backgroundColor: 'rgba(255,255,255,0.1)' }]}>
+                <QrCode size={32} color={theme.primary} />
+              </View>
+              <View>
+                <Text style={styles.btnTitle}>Escanear QR Code</Text>
+                <Text style={styles.btnDesc}>Use a câmera do celular</Text>
+              </View>
+              <ArrowRight size={20} color="rgba(255,255,255,0.5)" style={{ marginLeft: 'auto' }} />
+            </TouchableOpacity>
+
+            <TouchableOpacity style={styles.cardBtn} onPress={() => setModalVisible(true)}>
+              <View style={[styles.iconBox, { backgroundColor: 'rgba(255,255,255,0.1)' }]}>
+                <Keyboard size={32} color={theme.primary} />
+              </View>
+              <View>
+                <Text style={styles.btnTitle}>Digitar Código</Text>
+                <Text style={styles.btnDesc}>Insira o ID manualmente</Text>
+              </View>
+              <ArrowRight size={20} color="rgba(255,255,255,0.5)" style={{ marginLeft: 'auto' }} />
+            </TouchableOpacity>
+          </View>
+
+        </View>
+      </ImageBackground>
+
+      {/* Modal para Digitar Código */}
+      <Modal
+        animationType="slide"
+        transparent={true}
+        visible={modalVisible}
+        onRequestClose={() => setModalVisible(false)}
+      >
+        <KeyboardAvoidingView 
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          style={styles.modalContainer}
+        >
+          <View style={[styles.modalContent, { backgroundColor: theme.isDark ? '#1e293b' : 'white' }]}>
+            
+            <View style={styles.modalHeader}>
+              <Text style={[styles.modalTitle, { color: theme.text }]}>Código da Loja</Text>
+              <TouchableOpacity onPress={() => setModalVisible(false)}>
+                <X size={24} color={theme.textSecondary} />
+              </TouchableOpacity>
+            </View>
+
+            <Text style={[styles.modalLabel, { color: theme.textSecondary }]}>
+              Digite o identificador (slug) da barbearia:
+            </Text>
+
             <TextInput
-              style={styles.input}
-              placeholder="Ex: victor-azambuja"
-              placeholderTextColor="#64748b"
+              style={[
+                styles.input, 
+                { 
+                  borderColor: theme.border, 
+                  color: theme.text,
+                  backgroundColor: theme.surface 
+                }
+              ]}
+              placeholder="Ex: barbearia-do-jorge"
+              placeholderTextColor="#94a3b8"
               autoCapitalize="none"
+              autoCorrect={false}
               value={slug}
               onChangeText={setSlug}
             />
-          </View>
 
-          <TouchableOpacity 
-            style={[styles.button, loading && { opacity: 0.7 }]}
-            onPress={handleFindBarbershop}
-            disabled={loading}
-          >
-            {loading ? (
-              <ActivityIndicator color="#FFF" />
-            ) : (
-              <Text style={styles.buttonText}>Acessar Barbearia</Text>
-            )}
-          </TouchableOpacity>
-        </View>
-      </View>
-    </SafeAreaView>
+            <TouchableOpacity 
+              style={[styles.confirmBtn, { backgroundColor: theme.primary }]}
+              onPress={handleEnterShop}
+              disabled={loading}
+            >
+              {loading ? (
+                <ActivityIndicator color={theme.primaryText} />
+              ) : (
+                <Text style={[styles.confirmBtnText, { color: theme.primaryText }]}>
+                  Entrar na Barbearia
+                </Text>
+              )}
+            </TouchableOpacity>
+
+          </View>
+        </KeyboardAvoidingView>
+      </Modal>
+
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
+  container: { flex: 1 },
+  background: { flex: 1, width: '100%', height: '100%' },
+  overlay: {
     flex: 1,
-    backgroundColor: '#0f172a',
-  },
-  content: {
-    flex: 1,
+    backgroundColor: 'rgba(15, 23, 42, 0.85)', // Fundo escuro elegante
+    padding: 24,
     justifyContent: 'center',
-    paddingHorizontal: 24,
   },
-  header: {
-    alignItems: 'center',
-    marginBottom: 40,
+  
+  header: { marginBottom: 60 },
+  brand: { 
+    fontSize: 14, fontWeight: 'bold', color: 'rgba(255,255,255,0.7)', 
+    letterSpacing: 2, marginBottom: 10, textTransform: 'uppercase' 
+  },
+  title: { fontSize: 40, fontWeight: 'bold', color: 'white', marginBottom: 12, lineHeight: 44 },
+  subtitle: { fontSize: 16, color: '#94a3b8', lineHeight: 24 },
+
+  actions: { gap: 16 },
+  cardBtn: {
+    flexDirection: 'row', alignItems: 'center', gap: 16,
+    backgroundColor: 'rgba(255,255,255,0.05)',
+    padding: 20, borderRadius: 16,
+    borderWidth: 1, borderColor: 'rgba(255,255,255,0.1)',
   },
   iconBox: {
-    width: 80,
-    height: 80,
-    backgroundColor: '#2563eb',
-    borderRadius: 20,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 16,
+    width: 56, height: 56, borderRadius: 28,
+    justifyContent: 'center', alignItems: 'center',
   },
-  title: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: 'white',
-    textAlign: 'center',
+  btnTitle: { fontSize: 18, fontWeight: 'bold', color: 'white', marginBottom: 4 },
+  btnDesc: { fontSize: 14, color: '#94a3b8' },
+
+  // Modal
+  modalContainer: {
+    flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(0,0,0,0.5)',
   },
-  subtitle: {
-    color: '#94a3b8',
-    textAlign: 'center',
-    marginTop: 8,
-    fontSize: 16,
+  modalContent: {
+    padding: 24, borderTopLeftRadius: 24, borderTopRightRadius: 24,
+    paddingBottom: 40, elevation: 5,
   },
-  form: {
-    gap: 16,
+  modalHeader: {
+    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20,
   },
-  label: {
-    color: '#cbd5e1',
-    marginBottom: 8,
-    fontWeight: '500',
-  },
+  modalTitle: { fontSize: 20, fontWeight: 'bold' },
+  modalLabel: { fontSize: 14, marginBottom: 10 },
   input: {
-    backgroundColor: '#1e293b',
-    borderWidth: 1,
-    borderColor: '#334155',
-    borderRadius: 12,
-    paddingHorizontal: 16,
-    paddingVertical: 14,
-    color: 'white',
-    fontSize: 18,
+    height: 56, borderRadius: 12, borderWidth: 1, paddingHorizontal: 16,
+    fontSize: 16, marginBottom: 20,
   },
-  button: {
-    backgroundColor: '#2563eb',
-    borderRadius: 12,
-    paddingVertical: 16,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginTop: 10,
+  confirmBtn: {
+    height: 56, borderRadius: 12, justifyContent: 'center', alignItems: 'center',
   },
-  buttonText: {
-    color: 'white',
-    fontWeight: 'bold',
-    fontSize: 18,
-  }
+  confirmBtnText: { fontSize: 16, fontWeight: 'bold' },
 });

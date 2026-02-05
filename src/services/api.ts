@@ -93,13 +93,9 @@ export const api = {
     return response.data;
   },
 
-  getMyAppointments: async () => {
+getMyAppointments: async () => {
     const response = await apiInstance.get('/appointments');
-    // Garante que retorna array, mesmo se o backend mudar a estrutura
-    if (response.data.upcoming || response.data.history) {
-        return [...(response.data.upcoming || []), ...(response.data.history || [])];
-    }
-    return response.data; 
+    return response.data; // Retorna direto o array que o Controller mandou
   },
 
   cancelAppointment: async (id: string | number) => {

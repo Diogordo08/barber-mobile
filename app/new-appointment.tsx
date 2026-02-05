@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Image, ActivityIndicator, Alert } from 'react-native';
 import { useRouter, useFocusEffect } from 'expo-router'; 
-import { ArrowLeft, Scissors, User, Calendar, Clock, CheckCircle, ChevronRight } from 'lucide-react-native';
+import { ArrowLeft, Scissors, User, Calendar, Clock, CheckCircle, ChevronRight, AlertCircle } from 'lucide-react-native';
 import { api } from '../src/services/api';
 import { useTheme } from '../src/contexts/ThemeContext';
 import { useAuth } from '../src/contexts/AuthContext'; 
@@ -15,10 +15,11 @@ export default function NewAppointment() {
   const [services, setServices] = useState<ServiceItem[]>([]);
   const [barbers, setBarbers] = useState<Barber[]>([]);
   const [slots, setSlots] = useState<string[]>([]);
-  const [loading, setLoading] = useState(true);
+  
+  const [loading, setLoading] = useState(true); // Carregamento inicial da tela
+  const [loadingSlots, setLoadingSlots] = useState(false); // <--- NOVO: Carregamento dos horários
   const [submitting, setSubmitting] = useState(false);
 
-  // Estados do Wizard
   const [step, setStep] = useState(1);
   const [selectedService, setSelectedService] = useState<ServiceItem | null>(null);
   const [selectedBarber, setSelectedBarber] = useState<Barber | null>(null);
@@ -48,14 +49,21 @@ export default function NewAppointment() {
 
   // Busca horários dinâmicos
   useEffect(() => {
-    // Adicionei validação extra para garantir que só chama se tiver tudo
     if (step === 3 && selectedDate && selectedBarber && selectedService && shop?.slug) {
       setSlots([]);
+      setLoadingSlots(true); // <--- Começa a carregar
       
-      // 🔥 IMPORTANTE: Seu api.ts DEVE aceitar o 4º argumento (serviceId)
       api.getAvailableSlots(shop.slug, selectedDate, selectedBarber.id, selectedService.id)
-        .then(data => setSlots(data))
-        .catch(err => console.log("Erro slots:", err));
+        .then(data => {
+            setSlots(data);
+        })
+        .catch(err => {
+            console.log("Erro slots:", err);
+            setSlots([]); 
+        })
+        .finally(() => {
+            setLoadingSlots(false); // <--- Termina de carregar
+        });
     }
   }, [selectedDate, selectedBarber, selectedService, step, shop?.slug]);
 
@@ -94,24 +102,46 @@ export default function NewAppointment() {
 
     setSubmitting(true);
     try {
-      const fullDateISO = `${selectedDate}T${selectedTime}:00`;
+      const fullDateISO = `${selectedDate} ${selectedTime}:00`;
 
-      // 🔥 IMPORTANTE: Seu api.ts deve traduzir esses campos para snake_case
+      // 1. Envia para a API
       await api.createAppointment({
         barberId: selectedBarber!.id,
         serviceId: selectedService!.id,
         dateISO: fullDateISO,
-        // @ts-ignore (Caso o Typescript reclame que user não tem phone)
+        // @ts-ignore
         clientPhone: user.phone || '11999999999' 
       });
 
-      Alert.alert("Sucesso! 🎉", "Seu horário foi agendado.", [
-        { text: "Ver Agenda", onPress: () => router.replace('/(tabs)/agenda') }
-      ]);
+      // 2. Formata a data para exibir bonito na tela de sucesso
+      const dateFormatted = selectedDate.split('-').reverse().join('/');
+
+      // 3. Sucesso! Navega para a tela de confirmação passando os dados
+      router.replace({
+        pathname: '/appointment-success',
+        params: {
+          date: dateFormatted,
+          time: selectedTime,
+          barberName: selectedBarber?.name,
+          serviceName: selectedService?.name
+        }
+      });
+
     } catch (error: any) {
       console.log(error.response?.data);
-      const msg = error.response?.data?.message || "Falha ao agendar.";
-      Alert.alert("Ops!", msg);
+      
+      // Tratamento de erro específico do Backend
+      let msg = "Falha ao agendar.";
+      if (error.response?.data?.message) {
+        msg = error.response.data.message;
+        
+        // Se o erro for de limite de agendamentos (monthly_limit)
+        if (msg.includes('limit')) {
+            msg = "Você atingiu o limite de agendamentos do seu plano.";
+        }
+      }
+      
+      Alert.alert("Não foi possível agendar", msg);
       setSubmitting(false);
     }
   }
@@ -135,7 +165,7 @@ export default function NewAppointment() {
         <View style={{ width: 24 }} />
       </View>
 
-      {/* BARRA DE PROGRESSO */}
+      {/* PROGRESSO */}
       <View style={styles.progressContainer}>
         {[1, 2, 3, 4].map((s) => (
           <View
@@ -167,8 +197,6 @@ export default function NewAppointment() {
               <View style={{ flex: 1 }}>
                 <Text style={styles.cardTitle}>{service.name}</Text>
                 <Text style={styles.cardSubtitle}>
-                  {/* 👇 CORREÇÃO: Usar duration_minutes (padrão Laravel) ou durationMinutes (se converteu) */}
-                  {/* Usei a lógica de fallback para garantir */}
                   {/* @ts-ignore */}
                   {service.duration_minutes || service.durationMinutes} min • R$ {Number(service.price).toFixed(2)}
                 </Text>
@@ -178,8 +206,6 @@ export default function NewAppointment() {
           </TouchableOpacity>
         ))}
 
-        {/* ... (O RESTO DO CÓDIGO PERMANECE IGUAL) ... */}
-        
         {/* PASSO 2: BARBEIROS */}
         {step === 2 && barbers.map(barber => (
           <TouchableOpacity
@@ -229,12 +255,21 @@ export default function NewAppointment() {
             </ScrollView>
 
             <Text style={styles.label}>Horários Disponíveis</Text>
-            {slots.length === 0 ? (
-              <View style={{ padding: 20, alignItems: 'center' }}>
-                <Text style={{ color: '#94a3b8' }}>
-                  {selectedDate ? "Carregando ou sem horários..." : "Selecione uma data acima"}
-                </Text>
-              </View>
+            
+            {/* Lógica de UI Corrigida: Carregando vs Vazio */}
+            {loadingSlots ? (
+                <View style={{ padding: 40, alignItems: 'center' }}>
+                    <ActivityIndicator size="small" color={theme.primary} />
+                    <Text style={{ color: '#94a3b8', marginTop: 10 }}>Buscando horários...</Text>
+                </View>
+            ) : slots.length === 0 ? (
+                <View style={{ padding: 20, alignItems: 'center', backgroundColor: '#f8fafc', borderRadius: 12 }}>
+                    <AlertCircle size={32} color="#94a3b8" />
+                    <Text style={{ color: '#64748b', marginTop: 10, textAlign: 'center' }}>
+                      Nenhum horário disponível nesta data.
+                    </Text>
+                    <Text style={{ color: '#94a3b8', fontSize: 12 }}>Tente outro dia ou barbeiro.</Text>
+                </View>
             ) : (
               <View style={styles.grid}>
                 {slots.map(time => (
@@ -339,131 +374,53 @@ const styles = StyleSheet.create({
   center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   container: { flex: 1 },
   header: {
-    paddingTop: 60,
-    paddingHorizontal: 20,
-    paddingBottom: 20,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
+    paddingTop: 60, paddingHorizontal: 20, paddingBottom: 20,
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
     backgroundColor: 'white',
   },
   backButton: { padding: 5 },
   headerTitle: { fontSize: 18, fontWeight: 'bold', color: '#1e293b' },
   progressContainer: {
-    flexDirection: 'row',
-    gap: 8,
-    paddingHorizontal: 20,
-    paddingBottom: 20,
-    backgroundColor: 'white',
+    flexDirection: 'row', gap: 8, paddingHorizontal: 20, paddingBottom: 20, backgroundColor: 'white',
   },
-  progressDot: {
-    height: 4,
-    borderRadius: 2,
-  },
-  content: {
-    padding: 20,
-  },
+  progressDot: { height: 4, borderRadius: 2 },
+  content: { padding: 20 },
   card: {
-    backgroundColor: 'white',
-    padding: 15,
-    borderRadius: 12,
-    marginBottom: 15,
-    borderWidth: 1,
-    borderColor: '#e2e8f0',
+    backgroundColor: 'white', padding: 15, borderRadius: 12, marginBottom: 15,
+    borderWidth: 1, borderColor: '#e2e8f0',
   },
-  cardRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 15,
-  },
-  iconBox: {
-    padding: 10,
-    borderRadius: 8,
-  },
-  avatar: {
-    width: 50,
-    height: 50,
-    borderRadius: 25,
-  },
-  cardTitle: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    color: '#1e293b',
-  },
-  cardSubtitle: {
-    fontSize: 14,
-    color: '#64748b',
-    marginTop: 2,
-  },
-  label: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#334155',
-    marginBottom: 10,
-    marginTop: 10,
-  },
+  cardRow: { flexDirection: 'row', alignItems: 'center', gap: 15 },
+  iconBox: { padding: 10, borderRadius: 8 },
+  avatar: { width: 50, height: 50, borderRadius: 25 },
+  cardTitle: { fontSize: 16, fontWeight: 'bold', color: '#1e293b' },
+  cardSubtitle: { fontSize: 14, color: '#64748b', marginTop: 2 },
+  label: { fontSize: 16, fontWeight: '600', color: '#334155', marginBottom: 10, marginTop: 10 },
   dateChip: {
-    width: 60,
-    height: 70,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: 'white',
-    borderRadius: 12,
-    marginRight: 10,
-    borderWidth: 1,
-    borderColor: '#e2e8f0',
+    width: 60, height: 70, justifyContent: 'center', alignItems: 'center',
+    backgroundColor: 'white', borderRadius: 12, marginRight: 10,
+    borderWidth: 1, borderColor: '#e2e8f0',
   },
   dateWeek: { fontSize: 12, color: '#64748b', textTransform: 'uppercase' },
   dateNumber: { fontSize: 20, fontWeight: 'bold', color: '#1e293b' },
-  grid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 10,
-  },
+  grid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
   timeChip: {
-    width: '30%',
-    paddingVertical: 12,
-    backgroundColor: 'white',
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: '#e2e8f0',
-    alignItems: 'center',
+    width: '30%', paddingVertical: 12, backgroundColor: 'white',
+    borderRadius: 8, borderWidth: 1, borderColor: '#e2e8f0', alignItems: 'center',
   },
-  timeText: {
-    fontWeight: '600',
-    color: '#334155',
-  },
-  summaryCard: {
-    backgroundColor: 'white',
-    padding: 20,
-    borderRadius: 16,
-  },
+  timeText: { fontWeight: '600', color: '#334155' },
+  summaryCard: { backgroundColor: 'white', padding: 20, borderRadius: 16 },
   summaryTitle: { fontSize: 18, fontWeight: 'bold', marginBottom: 20, textAlign: 'center' },
   summaryRow: { flexDirection: 'row', alignItems: 'center', gap: 15, marginBottom: 20 },
   summaryLabel: { fontSize: 12, color: '#64748b' },
   summaryValue: { fontSize: 16, fontWeight: 'bold', color: '#1e293b' },
   divider: { height: 1, backgroundColor: '#e2e8f0', marginVertical: 10 },
   footer: {
-    position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
-    padding: 20,
-    backgroundColor: 'white',
-    borderTopWidth: 1,
-    borderTopColor: '#f1f5f9',
+    position: 'absolute', bottom: 0, left: 0, right: 0, padding: 20,
+    backgroundColor: 'white', borderTopWidth: 1, borderTopColor: '#f1f5f9',
   },
   footerBtn: {
-    padding: 16,
-    borderRadius: 12,
-    flexDirection: 'row',
-    justifyContent: 'center',
-    alignItems: 'center',
-    gap: 10,
+    padding: 16, borderRadius: 12, flexDirection: 'row',
+    justifyContent: 'center', alignItems: 'center', gap: 10,
   },
-  footerBtnText: {
-    color: 'white',
-    fontSize: 16,
-    fontWeight: 'bold',
-  }
+  footerBtnText: { color: 'white', fontSize: 16, fontWeight: 'bold' }
 });

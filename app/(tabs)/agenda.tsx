@@ -1,247 +1,240 @@
 import React, { useState, useCallback } from 'react';
-import { View, Text, StyleSheet, FlatList, TouchableOpacity, Alert, RefreshControl, ActivityIndicator } from 'react-native';
-import { useFocusEffect } from 'expo-router'; // Hook mágico para recarregar quando a aba ganha foco
-import { Calendar, Clock, Scissors, User, AlertCircle, XCircle } from 'lucide-react-native';
+import { View, Text, StyleSheet, FlatList, TouchableOpacity, ActivityIndicator, RefreshControl, Alert } from 'react-native';
+import { useFocusEffect, useRouter } from 'expo-router';
+import { Calendar, Clock, MapPin, User, AlertCircle } from 'lucide-react-native';
 import { api } from '../../src/services/api';
 import { useTheme } from '../../src/contexts/ThemeContext';
 import { Appointment } from '../../src/types';
 
-export default function Agenda() {
+export default function AgendaScreen() {
   const { theme } = useTheme();
+  const router = useRouter();
   
-  const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [appointments, setAppointments] = useState<Appointment[]>([]);
+  const [tab, setTab] = useState<'upcoming' | 'history'>('upcoming');
 
-  // Mapas para traduzir IDs (Na vida real viria do "include" do backend)
-  // Como estamos usando Mock, vamos simplificar e exibir o ID ou um nome fixo se não tiver o join
-  // Mas para ficar bonito, vou assumir que o objeto Appointment já tem os nomes (veja nota abaixo do código)
-
-  async function loadData() {
+  async function fetchAppointments() {
     try {
       const data = await api.getMyAppointments();
-      // Ordena por data (mais recente primeiro)
-      const sorted = data.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-      setAppointments(sorted);
+      console.log("Agenda Recebida:", JSON.stringify(data, null, 2)); // 🔍 Debug no console
+      
+      // Garante que é um array
+      const list = Array.isArray(data) ? data : (data.data || []);
+      setAppointments(list);
     } catch (error) {
-      console.log('Erro ao carregar agenda');
+      console.log("Erro ao buscar agenda:", error);
     } finally {
       setLoading(false);
       setRefreshing(false);
     }
   }
 
-  // Carrega ao abrir a primeira vez
-  // E também recarrega toda vez que você clica na aba "Agenda" (useFocusEffect)
   useFocusEffect(
     useCallback(() => {
-      loadData();
+      fetchAppointments();
     }, [])
   );
 
-  // Função de Puxar para Atualizar
-  function onRefresh() {
-    setRefreshing(true);
-    loadData();
-  }
-
-  // Função de Cancelar
-  function handleCancel(id: string) {
-    Alert.alert(
-      "Cancelar Agendamento",
-      "Tem certeza que deseja cancelar? Essa ação não pode ser desfeita.",
-      [
-        { text: "Não", style: "cancel" },
-        { 
-          text: "Sim, Cancelar", 
-          style: "destructive",
-          onPress: async () => {
-            try {
-              await api.cancelAppointment(id);
-              loadData(); // Recarrega a lista
-              Alert.alert("Cancelado", "Agendamento cancelado com sucesso.");
-            } catch (err) {
-              Alert.alert("Erro", "Não foi possível cancelar.");
-            }
+  async function handleCancel(id: number) {
+    Alert.alert("Cancelar", "Tem certeza que deseja cancelar este agendamento?", [
+      { text: "Não", style: "cancel" },
+      { 
+        text: "Sim, Cancelar", 
+        style: "destructive", 
+        onPress: async () => {
+          try {
+            await api.cancelAppointment(id);
+            fetchAppointments(); 
+            Alert.alert("Cancelado", "O agendamento foi cancelado.");
+          } catch (error) {
+            Alert.alert("Erro", "Não foi possível cancelar.");
           }
         }
-      ]
-    );
+      }
+    ]);
   }
 
-  // Renderiza cada cartão da lista
-  const renderItem = ({ item }: { item: Appointment }) => {
-    // Cores e Textos baseados no status
-    let statusColor = '#94a3b8';
-    let statusText = item.status;
+  // 🛠️ FUNÇÃO QUE CORRIGE O BUG DA DATA NO ANDROID
+  const parseDate = (dateString: string) => {
+    if (!dateString) return new Date();
+    // Troca espaço por T para o padrão ISO (2026-02-05T14:30:00)
+    return new Date(dateString.replace(' ', 'T'));
+  };
 
-    switch (item.status) {
-      case 'pendente': statusColor = '#f59e0b'; statusText = 'pendente'; break;
-      case 'confirmado': statusColor = '#2563eb'; statusText = 'confirmado'; break;
-      case 'concluido': statusColor = '#10b981'; statusText = 'concluido'; break;
-      case 'cancelado': statusColor = '#ef4444'; statusText = 'cancelado'; break;
+  // Lógica de Filtro: Próximos vs Histórico
+  const now = new Date();
+  
+  const filteredData = appointments.filter(app => {
+    const appDate = parseDate(app.scheduled_at);
+    
+    // Status que consideramos "ativos" para o futuro
+    const isValidStatus = app.status !== 'cancelled' && app.status !== 'no_show';
+    const isFuture = appDate >= now;
+
+    if (tab === 'upcoming') {
+      // Mostra se for futuro E não estiver cancelado
+      return isFuture && isValidStatus;
+    } else {
+      // Histórico: Passado OU Cancelado
+      return !isFuture || !isValidStatus;
     }
+  }).sort((a, b) => {
+    const dateA = parseDate(a.scheduled_at).getTime();
+    const dateB = parseDate(b.scheduled_at).getTime();
+    return tab === 'upcoming' ? dateA - dateB : dateB - dateA;
+  });
 
-    const dateObj = new Date(item.date);
-    const dateFormatted = dateObj.toLocaleDateString('pt-BR');
-    const timeFormatted = dateObj.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+  const getStatusColor = (status: string) => {
+    switch (status) {
+      case 'confirmed': return '#16a34a'; // Verde
+      case 'completed': return '#2563eb'; // Azul
+      case 'cancelled': return '#dc2626'; // Vermelho
+      default: return '#64748b'; // Cinza
+    }
+  };
 
-    // Mock de nomes para preencher visualmente (já que o endpoint getMyAppointments retorna IDs)
-    // Na API real, você retornaria o objeto Barber dentro do Appointment
-    const barberName = item.barberId === '1' ? 'Mestre Bigode' : 'Ana Navalha'; 
-    const serviceName = item.serviceId === '1' ? 'Corte de Cabelo' : item.serviceId === '2' ? 'Barba Completa' : 'Serviço';
+  const getStatusLabel = (status: string) => {
+    const map: Record<string, string> = {
+      confirmed: 'Confirmado',
+      completed: 'Concluído',
+      cancelled: 'Cancelado',
+      pending: 'Pendente',
+      no_show: 'Não Compareceu'
+    };
+    return map[status] || status;
+  };
+
+  const renderItem = ({ item }: { item: Appointment }) => {
+    const dateObj = parseDate(item.scheduled_at);
+    const dateStr = dateObj.toLocaleDateString('pt-BR');
+    const timeStr = dateObj.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
 
     return (
-      <View style={[styles.card, { borderLeftColor: statusColor }]}>
-        
-        {/* Header do Card: Data e Badge */}
+      <View style={styles.card}>
         <View style={styles.cardHeader}>
-          <View>
-            <Text style={styles.dateText}>{dateFormatted}</Text>
-            <View style={styles.row}>
-              <Clock size={14} color="#64748b" />
-              <Text style={styles.timeText}>{timeFormatted}</Text>
-            </View>
+          <View style={[styles.badge, { backgroundColor: getStatusColor(item.status) + '20' }]}>
+            <Text style={[styles.badgeText, { color: getStatusColor(item.status) }]}>
+              {getStatusLabel(item.status)}
+            </Text>
           </View>
-          <View style={[styles.badge, { backgroundColor: statusColor + '20' }]}>
-            <Text style={[styles.badgeText, { color: statusColor }]}>{statusText}</Text>
-          </View>
-        </View>
-
-        {/* Detalhes: Serviço e Barbeiro */}
-        <View style={styles.detailsBox}>
-          <View style={styles.row}>
-            <Scissors size={16} color="#64748b" />
-            <Text style={styles.detailText}>{serviceName}</Text>
-          </View>
-          <View style={[styles.row, { marginTop: 4 }]}>
-            <User size={16} color="#64748b" />
-            <Text style={styles.detailText}>{barberName}</Text>
-          </View>
-        </View>
-
-        {/* Footer: Preço e Ação */}
-        <View style={styles.cardFooter}>
           <Text style={[styles.price, { color: theme.primary }]}>
-            R$ {item.totalPrice?.toFixed(2)}
+            R$ {Number(item.total_price || 0).toFixed(2)}
           </Text>
+        </View>
 
-          {/* Botão de Cancelar (Só aparece se não for passado/cancelado) */}
-          {(item.status === 'pendente' || item.status === 'confirmado') && (
-            <TouchableOpacity 
-              style={styles.cancelButton} 
-              onPress={() => handleCancel(item.id)}
-            >
+        <View style={styles.row}>
+          <User size={18} color="#64748b" />
+          <Text style={styles.text}>{item.barber?.name || 'Profissional'}</Text>
+        </View>
+
+        <View style={styles.row}>
+          <Calendar size={18} color="#64748b" />
+          <Text style={styles.text}>{dateStr} às {timeStr}</Text>
+        </View>
+
+        <View style={styles.row}>
+          <MapPin size={18} color="#64748b" />
+          <Text style={styles.text}>{item.barbershop?.name || 'Barbearia'}</Text>
+        </View>
+
+        <View style={styles.divider} />
+
+        <View style={styles.cardFooter}>
+          <Text style={styles.serviceName}>{item.service?.name}</Text>
+          
+          {tab === 'upcoming' && item.status !== 'cancelled' && (
+            <TouchableOpacity onPress={() => handleCancel(item.id)}>
               <Text style={styles.cancelText}>Cancelar</Text>
             </TouchableOpacity>
           )}
-
-           {item.status === 'cancelado' && (
-             <View style={styles.row}>
-               <AlertCircle size={14} color="#ef4444" />
-               <Text style={{ fontSize: 12, color: '#ef4444', marginLeft: 4 }}>Cancelado</Text>
-             </View>
-           )}
         </View>
       </View>
     );
   };
 
-  if (loading) {
-    return <View style={styles.center}><ActivityIndicator size="large" color={theme.primary} /></View>;
-  }
-
   return (
     <View style={[styles.container, { backgroundColor: theme.background }]}>
-      <Text style={styles.pageTitle}>Meus Agendamentos</Text>
+      <View style={styles.header}>
+        <Text style={styles.title}>Meus Agendamentos</Text>
+      </View>
 
-      <FlatList
-        data={appointments}
-        keyExtractor={item => item.id}
-        renderItem={renderItem}
-        contentContainerStyle={{ paddingBottom: 100 }}
-        showsVerticalScrollIndicator={false}
-        // Pull to Refresh (Puxar pra atualizar)
-        refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={[theme.primary]} />
-        }
-        // Estado Vazio
-        ListEmptyComponent={
-          <View style={styles.emptyState}>
-            <Calendar size={48} color="#cbd5e1" />
-            <Text style={styles.emptyTitle}>Sua agenda está livre</Text>
-            <Text style={styles.emptyText}>Que tal marcar um trato no visual?</Text>
-          </View>
-        }
-      />
+      <View style={styles.tabs}>
+        <TouchableOpacity 
+          style={[styles.tabBtn, tab === 'upcoming' && { borderBottomColor: theme.primary, borderBottomWidth: 2 }]}
+          onPress={() => setTab('upcoming')}
+        >
+          <Text style={[styles.tabText, tab === 'upcoming' && { color: theme.primary, fontWeight: 'bold' }]}>
+            Próximos
+          </Text>
+        </TouchableOpacity>
+        
+        <TouchableOpacity 
+          style={[styles.tabBtn, tab === 'history' && { borderBottomColor: theme.primary, borderBottomWidth: 2 }]}
+          onPress={() => setTab('history')}
+        >
+          <Text style={[styles.tabText, tab === 'history' && { color: theme.primary, fontWeight: 'bold' }]}>
+            Histórico
+          </Text>
+        </TouchableOpacity>
+      </View>
+
+      {loading ? (
+        <View style={styles.center}><ActivityIndicator color={theme.primary} /></View>
+      ) : (
+        <FlatList
+          data={filteredData}
+          keyExtractor={(item) => String(item.id)}
+          renderItem={renderItem}
+          contentContainerStyle={{ padding: 20, paddingBottom: 100 }}
+          refreshControl={
+            <RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); fetchAppointments(); }} />
+          }
+          ListEmptyComponent={
+            <View style={styles.emptyState}>
+              <AlertCircle size={40} color="#cbd5e1" />
+              <Text style={{ color: '#94a3b8', marginTop: 10 }}>
+                {tab === 'upcoming' ? 'Nenhum agendamento futuro.' : 'Histórico vazio.'}
+              </Text>
+              {tab === 'upcoming' && (
+                <TouchableOpacity onPress={() => router.push('/new-appointment')} style={{ marginTop: 20 }}>
+                  <Text style={{ color: theme.primary, fontWeight: 'bold' }}>Agendar Novo</Text>
+                </TouchableOpacity>
+              )}
+            </View>
+          }
+        />
+      )}
     </View>
   );
 }
 
 const styles = StyleSheet.create({
+  container: { flex: 1 },
   center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-  container: { flex: 1, padding: 20, paddingTop: 60 },
-  pageTitle: { fontSize: 24, fontWeight: 'bold', color: '#1e293b', marginBottom: 20 },
-  
+  header: {
+    paddingTop: 60, paddingHorizontal: 20, paddingBottom: 20, backgroundColor: 'white',
+    borderBottomWidth: 1, borderBottomColor: '#f1f5f9'
+  },
+  title: { fontSize: 22, fontWeight: 'bold', color: '#1e293b' },
+  tabs: { flexDirection: 'row', backgroundColor: 'white' },
+  tabBtn: { flex: 1, paddingVertical: 15, alignItems: 'center' },
+  tabText: { fontSize: 16, color: '#64748b' },
   card: {
-    backgroundColor: 'white',
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 16,
-    borderLeftWidth: 5, // Faixa colorida lateral
-    // Shadow
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 5,
-    elevation: 2,
+    backgroundColor: 'white', borderRadius: 12, padding: 16, marginBottom: 16,
+    borderWidth: 1, borderColor: '#e2e8f0',
+    shadowColor: '#000', shadowOpacity: 0.03, shadowRadius: 5, elevation: 2
   },
-  cardHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
-    marginBottom: 12,
-  },
-  dateText: { fontSize: 18, fontWeight: 'bold', color: '#1e293b' },
-  timeText: { fontSize: 14, color: '#64748b', marginLeft: 4 },
-  
-  badge: { paddingHorizontal: 8, paddingVertical: 4, borderRadius: 6 },
+  cardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 },
+  badge: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 20 },
   badgeText: { fontSize: 12, fontWeight: 'bold', textTransform: 'uppercase' },
-
-  row: { flexDirection: 'row', alignItems: 'center' },
-
-  detailsBox: {
-    backgroundColor: '#f8fafc',
-    padding: 10,
-    borderRadius: 8,
-    marginBottom: 12,
-  },
-  detailText: { marginLeft: 8, color: '#475569', fontSize: 14 },
-
-  cardFooter: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    borderTopWidth: 1,
-    borderTopColor: '#f1f5f9',
-    paddingTop: 12,
-  },
-  price: { fontSize: 18, fontWeight: 'bold' },
-  
-  cancelButton: {
-    paddingVertical: 6,
-    paddingHorizontal: 12,
-    borderWidth: 1,
-    borderColor: '#ef4444',
-    borderRadius: 6,
-  },
-  cancelText: { color: '#ef4444', fontSize: 12, fontWeight: '600' },
-
-  emptyState: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginTop: 50,
-  },
-  emptyTitle: { fontSize: 18, fontWeight: '600', color: '#64748b', marginTop: 10 },
-  emptyText: { color: '#94a3b8', marginTop: 5 },
+  price: { fontSize: 16, fontWeight: 'bold' },
+  row: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 8 },
+  text: { color: '#334155', fontSize: 14 },
+  divider: { height: 1, backgroundColor: '#f1f5f9', marginVertical: 10 },
+  cardFooter: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  serviceName: { fontWeight: 'bold', color: '#1e293b', fontSize: 16 },
+  cancelText: { color: '#dc2626', fontSize: 14, fontWeight: '600' },
+  emptyState: { alignItems: 'center', marginTop: 50 }
 });

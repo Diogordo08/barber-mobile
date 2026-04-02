@@ -86,7 +86,7 @@ export default function AgendaScreen() {
   const filteredData = appointments.filter(app => {
     const appDate = parseDate(app.scheduled_at);
     // Filtramos para não mostrar cancelados na aba de próximos
-    const isActive = !['cancelled', 'no_show', 'completed'].includes(app.status);
+    const isActive = !['canceled', 'no_show', 'completed'].includes(app.status);
     const isFuture = appDate >= now;
 
     if (tab === 'upcoming') {
@@ -104,7 +104,7 @@ export default function AgendaScreen() {
     switch (status) {
       case 'confirmed': return '#16a34a';
       case 'completed': return '#2563eb';
-      case 'cancelled': return '#dc2626';
+      case 'canceled': return '#dc2626';
       default: return '#64748b';
     }
   };
@@ -113,7 +113,7 @@ export default function AgendaScreen() {
     const map: Record<string, string> = {
       confirmed: 'Confirmado',
       completed: 'Concluído',
-      cancelled: 'Cancelado',
+      canceled: 'Cancelado',
       pending: 'Pendente',
       no_show: 'Não Compareceu'
     };
@@ -158,7 +158,7 @@ export default function AgendaScreen() {
         <View style={styles.cardFooter}>
           <Text style={styles.serviceName}>{item.service?.name}</Text>
           
-          {tab === 'upcoming' && item.status !== 'cancelled' && (
+          {tab === 'upcoming' && item.status !== 'canceled' && (
             <TouchableOpacity 
               style={styles.cancelButton} 
               onPress={() => handleCancel(item.id)}

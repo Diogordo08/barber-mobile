@@ -21,8 +21,12 @@ export default function Register() {
       return Alert.alert("Atenção", "Por favor, preencha todos os campos.");
     }
 
-    if (password.length < 8) { // 2. Ajustado para 8 caracteres
-      return Alert.alert("Senha curta", "Sua senha precisa ter no mínimo 8 caracteres.");
+    if (password.length < 10) {
+      return Alert.alert("Senha fraca", "Sua senha precisa ter no mínimo 10 caracteres.");
+    }
+
+    if (!/[A-Z]/.test(password) || !/[a-z]/.test(password) || !/[0-9]/.test(password)) {
+      return Alert.alert("Senha fraca", "Sua senha deve conter letras maiúsculas, minúsculas e números.");
     }
 
     if (password !== confirmPassword) { // 3. Validação de senhas

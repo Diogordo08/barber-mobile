@@ -39,7 +39,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         }
 
         if (storedShop) {
-          setShop(JSON.parse(storedShop));
+          const parsedShop = JSON.parse(storedShop);
+          setShop(parsedShop);
+          // Atualiza em background para pegar campos novos (description, opening_hours, etc.)
+          api.getBarbershop(parsedShop.slug).then(async (freshShop) => {
+            setShop(freshShop);
+            await AsyncStorage.setItem('@BarberSaaS:shop', JSON.stringify(freshShop));
+          }).catch(() => { /* mantém cache se offline */ });
         }
 
       } catch (error) {
@@ -78,7 +84,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       
     } catch (error: any) {
       console.error("Erro no login:", error);
-      const message = error.response?.data?.message || 'Credenciais inválidas.';
+      const status = error.response?.status;
+      let message: string;
+      if (status === 429) {
+        message = 'Muitas tentativas. Aguarde 1 minuto e tente novamente.';
+      } else {
+        message =
+          error.response?.data?.errors?.email?.[0] ||
+          error.response?.data?.message ||
+          'Credenciais inválidas.';
+      }
       throw new Error(message);
     }
   }

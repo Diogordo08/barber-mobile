@@ -9,7 +9,7 @@ import {
 } from 'lucide-react-native';
 import { useAuth } from '../../src/contexts/AuthContext';
 import { useTheme } from '../../src/contexts/ThemeContext';
-import { api } from '../../src/services/api';
+import { api, storageUrl } from '../../src/services/api';
 import { Barber, ServiceItem } from '../../src/types';
 
 const { width } = Dimensions.get('window');
@@ -23,16 +23,19 @@ export default function HomeScreen() {
   const [services, setServices] = useState<ServiceItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [isVip, setIsVip] = useState(false);
 
   async function loadData() {
     if (!shop?.slug) return;
     try {
-      const [barbersData, servicesData] = await Promise.all([
+      const [barbersData, servicesData, subscription] = await Promise.all([
         api.getBarbers(shop.slug),
-        api.getServices(shop.slug)
+        api.getServices(shop.slug),
+        api.getSubscription(),
       ]);
       setBarbers(barbersData);
       setServices(servicesData);
+      setIsVip(subscription?.status === 'active');
     } catch (error) {
       console.log("Erro ao carregar home:", error);
     } finally {
@@ -123,18 +126,20 @@ export default function HomeScreen() {
             </View>
           </TouchableOpacity>
 
-          {/* Botão Assinatura (Secundário) */}
-          <TouchableOpacity 
-            style={[styles.secondaryActionCard, { backgroundColor: theme.surface, borderColor: theme.primary }]}
-            onPress={() => router.push('/plans')}
-          >
-            <View style={[styles.iconBoxSmall, { backgroundColor: '#FFFBEB' }]}>
-              <Crown size={20} color="#d97706" fill="#d97706" />
-            </View>
-            <Text style={[styles.secondaryActionText, { color: theme.text }]}>
-              Seja <Text style={{ color: theme.primary, fontWeight: 'bold' }}>VIP</Text> e economize
-            </Text>
-          </TouchableOpacity>
+          {/* Botão Assinatura (Secundário) — oculto para assinantes ativos */}
+          {!isVip && (
+            <TouchableOpacity 
+              style={[styles.secondaryActionCard, { backgroundColor: theme.surface, borderColor: theme.primary }]}
+              onPress={() => router.push('/plans')}
+            >
+              <View style={[styles.iconBoxSmall, { backgroundColor: '#FFFBEB' }]}>
+                <Crown size={20} color="#d97706" fill="#d97706" />
+              </View>
+              <Text style={[styles.secondaryActionText, { color: theme.text }]}>
+                Seja <Text style={{ color: theme.primary, fontWeight: 'bold' }}>VIP</Text> e economize
+              </Text>
+            </TouchableOpacity>
+          )}
         </View>
 
         {/* === 3. NOSSOS PROFISSIONAIS (ESTILO STORIES) === */}
@@ -151,7 +156,7 @@ export default function HomeScreen() {
               <TouchableOpacity style={styles.barberStory}>
                 <View style={[styles.barberImageContainer, { borderColor: theme.primary }]}>
                   <Image 
-                    source={{ uri: item.avatar || `https://ui-avatars.com/api/?name=${item.name}&background=0D8ABC&color=fff` }} 
+                    source={{ uri: storageUrl(item.avatar) || `https://ui-avatars.com/api/?name=${encodeURIComponent(item.name)}&background=0D8ABC&color=fff` }} 
                     style={styles.barberImage} 
                   />
                   {/* Badge de Nota */}
@@ -209,23 +214,56 @@ export default function HomeScreen() {
             </Text>
             
             <View style={[styles.divider, { backgroundColor: theme.border, marginVertical: 15 }]} />
-            
-            <View style={styles.infoRow}>
-              <View style={styles.infoItem}>
-                <Clock size={20} color={theme.primary} />
-                <View>
-                  <Text style={[styles.infoLabel, { color: theme.text }]}>Aberto hoje</Text>
-                  <Text style={styles.infoValue}>09:00 às 20:00</Text>
-                </View>
-              </View>
-              <View style={styles.infoItem}>
-                <Phone size={20} color={theme.primary} />
-                <View>
-                  <Text style={[styles.infoLabel, { color: theme.text }]}>Contato</Text>
-                  <Text style={styles.infoValue}>{shop?.whatsapp || '(11) 99999-9999'}</Text>
-                </View>
+
+            {/* Contato */}
+            <View style={styles.infoItem}>
+              <Phone size={18} color={theme.primary} />
+              <View>
+                <Text style={[styles.infoLabel, { color: theme.text }]}>Contato</Text>
+                <Text style={styles.infoValue}>
+                  {shop?.whatsapp
+                    ? shop.whatsapp
+                        .replace(/^https:\/\/wa\.me\/55/, '')
+                        .replace(/^55/, '')
+                        .replace(/(\d{2})(\d{5})(\d{4})/, '($1) $2-$3')
+                    : 'Não informado'}
+                </Text>
               </View>
             </View>
+
+            <View style={[styles.divider, { backgroundColor: theme.border, marginVertical: 15 }]} />
+
+            {/* Horários de funcionamento */}
+            <View style={styles.scheduleHeader}>
+              <Clock size={18} color={theme.primary} />
+              <Text style={[styles.infoLabel, { color: theme.text, marginBottom: 0 }]}>Horário de Funcionamento</Text>
+            </View>
+            {(() => {
+              const DAY_NAMES = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
+              const todayDow = new Date().getDay();
+              const hours = shop?.opening_hours || [];
+              return DAY_NAMES.map((dayName, dow) => {
+                const entry = hours.find(h => h.day_of_week === dow);
+                const isToday = dow === todayDow;
+                const isClosed = !entry || entry.is_closed;
+                const timeText = isClosed
+                  ? 'Fechado'
+                  : `${entry.opening_time?.slice(0, 5)} às ${entry.closing_time?.slice(0, 5)}`;
+                return (
+                  <View
+                    key={dow}
+                    style={[styles.scheduleRow, isToday && { backgroundColor: theme.primary + '12', borderRadius: 8 }]}
+                  >
+                    <Text style={[styles.scheduleDay, { color: isToday ? theme.primary : theme.text, fontWeight: isToday ? 'bold' : '500' }]}>
+                      {dayName}{isToday ? ' (hoje)' : ''}
+                    </Text>
+                    <Text style={[styles.scheduleTime, { color: isClosed ? '#94a3b8' : theme.textSecondary }]}>
+                      {timeText}
+                    </Text>
+                  </View>
+                );
+              });
+            })()}
           </View>
         </View>
 
@@ -323,4 +361,8 @@ const styles = StyleSheet.create({
   infoItem: { flexDirection: 'row', gap: 12, alignItems: 'center' },
   infoLabel: { fontSize: 12, textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 2 },
   infoValue: { fontSize: 14, color: '#64748b', fontWeight: '500' },
+  scheduleHeader: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 10 },
+  scheduleRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 7, paddingHorizontal: 6 },
+  scheduleDay: { fontSize: 14 },
+  scheduleTime: { fontSize: 14 },
 });

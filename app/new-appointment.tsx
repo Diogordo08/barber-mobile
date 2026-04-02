@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Image, ActivityIndicator, Alert } from 'react-native';
 import { useRouter, useFocusEffect } from 'expo-router'; 
 import { ArrowLeft, Scissors, User, Calendar, Clock, CheckCircle, ChevronRight, AlertCircle } from 'lucide-react-native';
-import { api } from '../src/services/api';
+import { api, storageUrl } from '../src/services/api';
 import { useTheme } from '../src/contexts/ThemeContext';
 import { useAuth } from '../src/contexts/AuthContext'; 
 import { Barber, ServiceItem } from '../src/types';
@@ -55,14 +55,37 @@ export default function NewAppointment() {
       
       api.getAvailableSlots(shop.slug, selectedDate, selectedBarber.id, selectedService.id)
         .then(data => {
+            // Filtra horários já passados quando a data selecionada é hoje
+            const todayStr = (() => {
+              const t = new Date();
+              return `${t.getFullYear()}-${String(t.getMonth() + 1).padStart(2, '0')}-${String(t.getDate()).padStart(2, '0')}`;
+            })();
+            if (selectedDate === todayStr) {
+              const now = new Date();
+              const nowMinutes = now.getHours() * 60 + now.getMinutes() + 15; // 15min de margem
+              data = data.filter((slot: string) => {
+                const [h, m] = slot.split(':').map(Number);
+                return h * 60 + m > nowMinutes;
+              });
+            }
             setSlots(data);
         })
         .catch(err => {
-            console.log("Erro slots:", err);
-            setSlots([]); 
+            const status = err.response?.status;
+            const msg = err.response?.data?.message || err.message || 'Erro de rede';
+            console.log(`[Slots] ERRO [${status}]:`, msg, JSON.stringify(err.response?.data));
+            setSlots([]);
+            if (!status) {
+              Alert.alert(
+                'Erro de conexão',
+                'Não foi possível buscar os horários.\n\nSe estiver testando pelo navegador, use o Expo Go no celular — o browser bloqueia requisições por CORS.'
+              );
+            } else if (status !== 404) {
+              Alert.alert('Erro ao buscar horários', `[${status}] ${msg}`);
+            }
         })
         .finally(() => {
-            setLoadingSlots(false); // <--- Termina de carregar
+            setLoadingSlots(false);
         });
     }
   }, [selectedDate, selectedBarber, selectedService, step, shop?.slug]);
@@ -74,7 +97,7 @@ export default function NewAppointment() {
       const d = new Date(today);
       d.setDate(today.getDate() + i);
       dates.push({
-        fullDate: d.toISOString().split('T')[0],
+        fullDate: `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`,
         day: d.getDate(),
         weekDay: d.toLocaleDateString('pt-BR', { weekday: 'short' }).replace('.', ''),
       });
@@ -102,6 +125,7 @@ export default function NewAppointment() {
 
     setSubmitting(true);
     try {
+      // Backend espera formato "Y-m-d H:i:s" (espaço, não T)
       const fullDateISO = `${selectedDate} ${selectedTime}:00`;
 
       // 1. Envia para a API
@@ -109,8 +133,6 @@ export default function NewAppointment() {
         barberId: selectedBarber!.id,
         serviceId: selectedService!.id,
         dateISO: fullDateISO,
-        // @ts-ignore
-        clientPhone: user.phone || '11999999999' 
       });
 
       // 2. Formata a data para exibir bonito na tela de sucesso
@@ -217,7 +239,13 @@ export default function NewAppointment() {
             onPress={() => setSelectedBarber(barber)}
           >
             <View style={styles.cardRow}>
-              <Image source={{ uri: barber.avatar }} style={styles.avatar} />
+              {storageUrl(barber.avatar) ? (
+                <Image source={{ uri: storageUrl(barber.avatar) }} style={styles.avatar} />
+              ) : (
+                <View style={[styles.avatar, { backgroundColor: '#e2e8f0', justifyContent: 'center', alignItems: 'center' }]}>
+                  <User size={28} color="#94a3b8" />
+                </View>
+              )}
               <View style={{ flex: 1 }}>
                 <Text style={styles.cardTitle}>{barber.name}</Text>
                 <Text style={styles.cardSubtitle}>{barber.role}</Text>
@@ -272,17 +300,17 @@ export default function NewAppointment() {
                 </View>
             ) : (
               <View style={styles.grid}>
-                {slots.map(time => (
+                {slots.map((slot) => (
                   <TouchableOpacity
-                    key={time}
+                    key={`slot-${slot}`}
                     style={[
                       styles.timeChip,
-                      selectedTime === time && { backgroundColor: theme.primary, borderColor: theme.primary }
+                      selectedTime === slot && { backgroundColor: theme.primary, borderColor: theme.primary }
                     ]}
-                    onPress={() => setSelectedTime(time)}
+                    onPress={() => setSelectedTime(slot)}
                   >
-                    <Text style={[styles.timeText, selectedTime === time && { color: 'white' }]}>
-                      {time}
+                    <Text style={[styles.timeText, selectedTime === slot && { color: 'white' }]}>
+                      {slot}
                     </Text>
                   </TouchableOpacity>
                 ))}

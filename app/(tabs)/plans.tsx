@@ -8,7 +8,7 @@ import { Crown, Check, CreditCard, Calendar, Star, AlertCircle } from 'lucide-re
 import { useAuth } from '../../src/contexts/AuthContext';
 import { useTheme } from '../../src/contexts/ThemeContext';
 import { api } from '../../src/services/api';
-import { Plan } from '../../src/types';
+import { Plan, Subscription } from '../../src/types';
 
 export default function PlansTab() {
   const router = useRouter();
@@ -16,7 +16,7 @@ export default function PlansTab() {
   const { shop, user } = useAuth();
 
   const [loading, setLoading] = useState(true);
-  const [subscription, setSubscription] = useState<any>(null);
+  const [subscription, setSubscription] = useState<Subscription | null>(null);
   const [plans, setPlans] = useState<Plan[]>([]);
   const [refreshing, setRefreshing] = useState(false);
 
@@ -76,9 +76,9 @@ export default function PlansTab() {
   if (subscription) {
     const plan = subscription.plan;
     const usage = subscription.uses_this_month;
-    const limit = plan?.monthly_limit || plan?.cuts_per_month;
+    const limit = plan?.cuts_per_month ?? null;
     const percent = limit ? (usage / limit) * 100 : 0;
-    const renewsDate = new Date(subscription.renews_at || Date.now()).toLocaleDateString('pt-BR');
+    const renewsDate = new Date(subscription.expires_at).toLocaleDateString('pt-BR');
 
     return (
       <View style={[styles.container, { backgroundColor: theme.background }]}>
@@ -124,7 +124,7 @@ export default function PlansTab() {
                 </View>
               </View>
             </View>
-            <TouchableOpacity style={styles.manageButton} onPress={() => router.push('/(tabs)/perfil')}>
+            <TouchableOpacity style={styles.manageButton} onPress={() => router.push('/my-plans')}>
               <Text style={{ color: theme.textSecondary }}>Gerenciar Assinatura</Text>
             </TouchableOpacity>
           </View>
@@ -178,8 +178,8 @@ export default function PlansTab() {
                 <View style={styles.limitContainer}>
                    <Check size={14} color={theme.success} />
                    <Text style={[styles.limitText, { color: theme.text }]}>
-                     {plan.monthly_limit || plan.cuts_per_month 
-                       ? `${plan.monthly_limit || plan.cuts_per_month} Cortes mensais` 
+                     {plan.cuts_per_month
+                       ? `${plan.cuts_per_month} Cortes mensais`
                        : 'Cortes Ilimitados'}
                    </Text>
                 </View>

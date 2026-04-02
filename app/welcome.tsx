@@ -1,10 +1,11 @@
-import React, { useState } from 'react';
+﻿import React, { useState } from 'react';
 import { 
   View, Text, StyleSheet, TouchableOpacity, ImageBackground, StatusBar, 
   Modal, TextInput, ActivityIndicator, Alert, KeyboardAvoidingView, Platform 
 } from 'react-native';
 import { useRouter } from 'expo-router';
-import { QrCode, Keyboard, ArrowRight, X } from 'lucide-react-native';
+import { QrCode, Keyboard, ArrowRight, X, ZapOff } from 'lucide-react-native';
+import { CameraView, useCameraPermissions } from 'expo-camera';
 import { useTheme } from '../src/contexts/ThemeContext';
 import { useAuth } from '../src/contexts/AuthContext';
 import { api } from '../src/services/api';
@@ -12,68 +13,79 @@ import { api } from '../src/services/api';
 export default function LandingScreen() {
   const router = useRouter();
   const { theme } = useTheme();
-  const { selectShop } = useAuth(); // Importante: Função para salvar a loja escolhida
+  const { selectShop } = useAuth();
 
   const [modalVisible, setModalVisible] = useState(false);
+  const [scannerVisible, setScannerVisible] = useState(false);
+  const [scanning, setScanning] = useState(false);
   const [slug, setSlug] = useState('');
   const [loading, setLoading] = useState(false);
 
-  // Função para validar e entrar na loja
-  async function handleEnterShop() {
-    if (!slug.trim()) {
-      Alert.alert("Ops!", "Digite o código da barbearia.");
-      return;
-    }
+  const [permission, requestPermission] = useCameraPermissions();
 
+  async function enterWithSlug(slugValue: string) {
+    if (!slugValue.trim()) return;
     setLoading(true);
     try {
-      // 1. Busca a barbearia na API pelo slug
-      const shopData = await api.getBarbershop(slug.trim().toLowerCase());
-      
+      const shopData = await api.getBarbershop(slugValue.trim().toLowerCase());
       if (shopData && shopData.id) {
-        // 2. Salva no Contexto (Global)
         await selectShop(shopData);
-        
-        // 3. Fecha modal e vai para o Login/Welcome
         setModalVisible(false);
-        router.push('/login'); // Ou '/welcome' se preferir a tela de boas-vindas da loja
+        setScannerVisible(false);
+        router.push('/login');
       } else {
-        Alert.alert("Não encontrada", "Nenhuma barbearia encontrada com este código.");
+        Alert.alert("NÃ£o encontrada", "Nenhuma barbearia encontrada com este cÃ³digo.");
       }
     } catch (error) {
-      Alert.alert("Erro", "Falha ao buscar barbearia. Verifique o código.");
+      Alert.alert("Erro", "Falha ao buscar barbearia. Verifique o cÃ³digo.");
     } finally {
       setLoading(false);
+      setScanning(false);
     }
   }
 
-  function handleScanQr() {
-    // Futuramente aqui você abre a câmera
-    Alert.alert("Em breve", "A funcionalidade de câmera será ativada na próxima atualização.");
+  async function handleScanQr() {
+    if (!permission?.granted) {
+      const result = await requestPermission();
+      if (!result.granted) {
+        Alert.alert("PermissÃ£o negada", "Permita o acesso Ã  cÃ¢mera nas configuraÃ§Ãµes do dispositivo.");
+        return;
+      }
+    }
+    setScannerVisible(true);
+  }
+
+  function handleBarCodeScanned({ data }: { data: string }) {
+    if (scanning) return;
+    setScanning(true);
+
+    // O QR Code pode conter a URL completa ou apenas o slug
+    // Ex: "https://barbearia-api.on-forge.com/minha-barbearia" ou "minha-barbearia"
+    let extractedSlug = data.trim();
+    const urlMatch = data.match(/\/([^/]+)\/?$/);
+    if (urlMatch) extractedSlug = urlMatch[1];
+
+    enterWithSlug(extractedSlug);
   }
 
   return (
     <View style={styles.container}>
       <StatusBar barStyle="light-content" translucent backgroundColor="transparent" />
       
-      {/* Fundo Premium */}
       <ImageBackground 
         source={{ uri: 'https://images.unsplash.com/photo-1503951914875-452162b0f3f1?q=80&w=2070&auto=format&fit=crop' }} 
         style={styles.background}
         resizeMode="cover"
       >
         <View style={styles.overlay}>
-          
-          {/* Texto de Boas-vindas */}
           <View style={styles.header}>
             <Text style={styles.brand}>BARBER<Text style={{ color: theme.primary }}>SaaS</Text></Text>
             <Text style={styles.title}>Encontre sua Barbearia</Text>
             <Text style={styles.subtitle}>
-              Escaneie o QR Code no balcão ou digite o código da barbearia para começar.
+              Escaneie o QR Code no balcÃ£o ou digite o cÃ³digo da barbearia para comeÃ§ar.
             </Text>
           </View>
 
-          {/* Botões de Ação */}
           <View style={styles.actions}>
             <TouchableOpacity style={styles.cardBtn} onPress={handleScanQr}>
               <View style={[styles.iconBox, { backgroundColor: 'rgba(255,255,255,0.1)' }]}>
@@ -81,7 +93,7 @@ export default function LandingScreen() {
               </View>
               <View>
                 <Text style={styles.btnTitle}>Escanear QR Code</Text>
-                <Text style={styles.btnDesc}>Use a câmera do celular</Text>
+                <Text style={styles.btnDesc}>Use a cÃ¢mera do celular</Text>
               </View>
               <ArrowRight size={20} color="rgba(255,255,255,0.5)" style={{ marginLeft: 'auto' }} />
             </TouchableOpacity>
@@ -91,17 +103,47 @@ export default function LandingScreen() {
                 <Keyboard size={32} color={theme.primary} />
               </View>
               <View>
-                <Text style={styles.btnTitle}>Digitar Código</Text>
+                <Text style={styles.btnTitle}>Digitar CÃ³digo</Text>
                 <Text style={styles.btnDesc}>Insira o ID manualmente</Text>
               </View>
               <ArrowRight size={20} color="rgba(255,255,255,0.5)" style={{ marginLeft: 'auto' }} />
             </TouchableOpacity>
           </View>
-
         </View>
       </ImageBackground>
 
-      {/* Modal para Digitar Código */}
+      {/* === SCANNER DE QR CODE === */}
+      <Modal visible={scannerVisible} animationType="slide" onRequestClose={() => setScannerVisible(false)}>
+        <View style={styles.scannerContainer}>
+          <CameraView
+            style={StyleSheet.absoluteFillObject}
+            facing="back"
+            barcodeScannerSettings={{ barcodeTypes: ['qr'] }}
+            onBarcodeScanned={handleBarCodeScanned}
+          />
+
+          {/* Overlay escuro com janela de scan */}
+          <View style={styles.scannerOverlay}>
+            <View style={styles.scannerWindow} />
+          </View>
+
+          <View style={styles.scannerHeader}>
+            <TouchableOpacity onPress={() => { setScannerVisible(false); setScanning(false); }} style={styles.closeBtn}>
+              <X size={24} color="white" />
+            </TouchableOpacity>
+            <Text style={styles.scannerTitle}>Aponte para o QR Code</Text>
+          </View>
+
+          {loading && (
+            <View style={styles.scannerLoading}>
+              <ActivityIndicator size="large" color={theme.primary} />
+              <Text style={{ color: 'white', marginTop: 10 }}>Buscando barbearia...</Text>
+            </View>
+          )}
+        </View>
+      </Modal>
+
+      {/* === MODAL DIGITAR CÃ“DIGO === */}
       <Modal
         animationType="slide"
         transparent={true}
@@ -113,9 +155,8 @@ export default function LandingScreen() {
           style={styles.modalContainer}
         >
           <View style={[styles.modalContent, { backgroundColor: theme.isDark ? '#1e293b' : 'white' }]}>
-            
             <View style={styles.modalHeader}>
-              <Text style={[styles.modalTitle, { color: theme.text }]}>Código da Loja</Text>
+              <Text style={[styles.modalTitle, { color: theme.text }]}>CÃ³digo da Loja</Text>
               <TouchableOpacity onPress={() => setModalVisible(false)}>
                 <X size={24} color={theme.textSecondary} />
               </TouchableOpacity>
@@ -126,14 +167,7 @@ export default function LandingScreen() {
             </Text>
 
             <TextInput
-              style={[
-                styles.input, 
-                { 
-                  borderColor: theme.border, 
-                  color: theme.text,
-                  backgroundColor: theme.surface 
-                }
-              ]}
+              style={[styles.input, { borderColor: theme.border, color: theme.text, backgroundColor: theme.surface }]}
               placeholder="Ex: barbearia-do-jorge"
               placeholderTextColor="#94a3b8"
               autoCapitalize="none"
@@ -144,22 +178,18 @@ export default function LandingScreen() {
 
             <TouchableOpacity 
               style={[styles.confirmBtn, { backgroundColor: theme.primary }]}
-              onPress={handleEnterShop}
+              onPress={() => enterWithSlug(slug)}
               disabled={loading}
             >
               {loading ? (
-                <ActivityIndicator color={theme.primaryText} />
+                <ActivityIndicator color="white" />
               ) : (
-                <Text style={[styles.confirmBtnText, { color: theme.primaryText }]}>
-                  Entrar na Barbearia
-                </Text>
+                <Text style={styles.confirmBtnText}>Entrar na Barbearia</Text>
               )}
             </TouchableOpacity>
-
           </View>
         </KeyboardAvoidingView>
       </Modal>
-
     </View>
   );
 }
@@ -169,11 +199,10 @@ const styles = StyleSheet.create({
   background: { flex: 1, width: '100%', height: '100%' },
   overlay: {
     flex: 1,
-    backgroundColor: 'rgba(15, 23, 42, 0.85)', // Fundo escuro elegante
+    backgroundColor: 'rgba(15, 23, 42, 0.85)',
     padding: 24,
     justifyContent: 'center',
   },
-  
   header: { marginBottom: 60 },
   brand: { 
     fontSize: 14, fontWeight: 'bold', color: 'rgba(255,255,255,0.7)', 
@@ -181,7 +210,6 @@ const styles = StyleSheet.create({
   },
   title: { fontSize: 40, fontWeight: 'bold', color: 'white', marginBottom: 12, lineHeight: 44 },
   subtitle: { fontSize: 16, color: '#94a3b8', lineHeight: 24 },
-
   actions: { gap: 16 },
   cardBtn: {
     flexDirection: 'row', alignItems: 'center', gap: 16,
@@ -189,17 +217,37 @@ const styles = StyleSheet.create({
     padding: 20, borderRadius: 16,
     borderWidth: 1, borderColor: 'rgba(255,255,255,0.1)',
   },
-  iconBox: {
-    width: 56, height: 56, borderRadius: 28,
-    justifyContent: 'center', alignItems: 'center',
-  },
+  iconBox: { width: 56, height: 56, borderRadius: 28, justifyContent: 'center', alignItems: 'center' },
   btnTitle: { fontSize: 18, fontWeight: 'bold', color: 'white', marginBottom: 4 },
   btnDesc: { fontSize: 14, color: '#94a3b8' },
-
-  // Modal
-  modalContainer: {
-    flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(0,0,0,0.5)',
+  // Scanner
+  scannerContainer: { flex: 1, backgroundColor: 'black' },
+  scannerOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    justifyContent: 'center', alignItems: 'center',
+    backgroundColor: 'rgba(0,0,0,0.5)',
   },
+  scannerWindow: {
+    width: 250, height: 250, borderRadius: 16,
+    borderWidth: 2, borderColor: 'white',
+    backgroundColor: 'transparent',
+    shadowColor: '#fff', shadowOpacity: 0.3, shadowRadius: 10,
+  },
+  scannerHeader: {
+    position: 'absolute', top: 60, left: 0, right: 0,
+    flexDirection: 'row', alignItems: 'center', paddingHorizontal: 20, gap: 16,
+  },
+  closeBtn: {
+    width: 44, height: 44, borderRadius: 22,
+    backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center',
+  },
+  scannerTitle: { color: 'white', fontSize: 18, fontWeight: 'bold' },
+  scannerLoading: {
+    position: 'absolute', bottom: 80, left: 0, right: 0,
+    alignItems: 'center',
+  },
+  // Modal
+  modalContainer: { flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(0,0,0,0.5)' },
   modalContent: {
     padding: 24, borderTopLeftRadius: 24, borderTopRightRadius: 24,
     paddingBottom: 40, elevation: 5,
@@ -213,8 +261,6 @@ const styles = StyleSheet.create({
     height: 56, borderRadius: 12, borderWidth: 1, paddingHorizontal: 16,
     fontSize: 16, marginBottom: 20,
   },
-  confirmBtn: {
-    height: 56, borderRadius: 12, justifyContent: 'center', alignItems: 'center',
-  },
-  confirmBtnText: { fontSize: 16, fontWeight: 'bold' },
+  confirmBtn: { height: 56, borderRadius: 12, justifyContent: 'center', alignItems: 'center' },
+  confirmBtnText: { fontSize: 16, fontWeight: 'bold', color: 'white' },
 });

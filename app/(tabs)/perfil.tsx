@@ -13,7 +13,7 @@ import { useTheme } from '../../src/contexts/ThemeContext';
 
 export default function ProfileScreen() {
   const router = useRouter();
-  const { user, signOut } = useAuth();
+  const { user, signOut, shop } = useAuth();
   const { theme, isDark, toggleTheme } = useTheme();
 
   function handleLogout() {
@@ -86,7 +86,7 @@ export default function ProfileScreen() {
           </Text>
           
           <View style={[styles.roleBadge, { backgroundColor: theme.primary + '15' }]}>
-            <Text style={[styles.roleText, { color: theme.primary }]}>CLIENTE VIP</Text>
+            <Text style={[styles.roleText, { color: theme.primary }]}>CLIENTE</Text>
           </View>
         </View>
 
@@ -152,7 +152,14 @@ export default function ProfileScreen() {
             <MenuItem 
               icon={Mail} 
               label="Contactar a Barbearia" 
-              onPress={() => Alert.alert("Contacto", "contato@barbearia.com")} 
+              onPress={() => Alert.alert(
+                shop?.name || 'Barbearia',
+                shop?.whatsapp
+                  ? `WhatsApp: ${shop.whatsapp}`
+                  : shop?.phone
+                  ? `Telefone: ${shop.phone}`
+                  : 'Entre em contacto na recepção.'
+              )} 
             />
           </View>
         </View>

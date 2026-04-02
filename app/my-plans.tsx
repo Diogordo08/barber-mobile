@@ -4,14 +4,16 @@ import { useRouter } from 'expo-router';
 import { ArrowLeft, CreditCard, Calendar, XCircle, RefreshCw, CheckCircle, Crown } from 'lucide-react-native';
 import { api } from '../src/services/api';
 import { useTheme } from '../src/contexts/ThemeContext';
-import { Plan } from '../src/types';
+import { useAuth } from '../src/contexts/AuthContext';
+import { Plan, Subscription } from '../src/types';
 
 export default function MyPlan() {
   const router = useRouter();
-  const { theme, shop } = useTheme(); // 1. Pegamos o shop aqui
+  const { theme } = useTheme();
+  const { shop } = useAuth();
   
   const [loading, setLoading] = useState(true);
-  const [subscription, setSubscription] = useState<any>(null);
+  const [subscription, setSubscription] = useState<Subscription | null>(null);
   const [planDetails, setPlanDetails] = useState<Plan | null>(null);
 
   useEffect(() => {
@@ -26,7 +28,7 @@ export default function MyPlan() {
         setSubscription(sub);
         // 3. Passa o slug para buscar os planos
         const plans = await api.getPlans(shop.slug);
-        const details = plans.find((p: Plan) => p.id === sub.planId);
+        const details = plans.find((p: Plan) => p.id === sub.plan_id);
         setPlanDetails(details || null);
       } else {
         // Se não tiver plano, volta pro perfil
@@ -51,9 +53,14 @@ export default function MyPlan() {
           style: "destructive",
           onPress: async () => {
             setLoading(true);
-            await api.cancelSubscription();
-            Alert.alert("Cancelado", "Sua assinatura foi cancelada com sucesso.");
-            router.back();
+            try {
+              await api.cancelSubscription();
+              Alert.alert("Cancelado", "Sua assinatura foi cancelada com sucesso.");
+              router.back();
+            } catch {
+              setLoading(false);
+              Alert.alert("Erro", "Não foi possível cancelar. Tente novamente.");
+            }
           }
         }
       ]
@@ -94,7 +101,7 @@ export default function MyPlan() {
             <View>
               <Text style={styles.planLabel}>Plano Atual</Text>
               <Text style={styles.planName}>{planDetails.name}</Text>
-              <Text style={styles.planPrice}>R$ {planDetails.price.toFixed(2)}/mês</Text>
+              <Text style={styles.planPrice}>R$ {Number(planDetails.price).toFixed(2)}/mês</Text>
             </View>
           </View>
 
@@ -104,12 +111,12 @@ export default function MyPlan() {
             <View style={styles.infoItem}>
               <Calendar size={16} color="#94a3b8" />
               <Text style={styles.infoLabel}>Próxima Cobrança</Text>
-              <Text style={styles.infoValue}>{new Date(subscription.nextBillingDate).toLocaleDateString('pt-BR')}</Text>
+              <Text style={styles.infoValue}>{new Date(subscription.expires_at).toLocaleDateString('pt-BR')}</Text>
             </View>
             <View style={styles.infoItem}>
               <CreditCard size={16} color="#94a3b8" />
               <Text style={styles.infoLabel}>Método</Text>
-              <Text style={styles.infoValue}>Cartão Final 4242</Text>
+              <Text style={styles.infoValue}>{subscription?.payment_method === 'pix' ? 'PIX' : subscription?.payment_method === 'card' ? 'Cartão' : 'Não informado'}</Text>
             </View>
           </View>
         </View>

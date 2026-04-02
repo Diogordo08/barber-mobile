@@ -39,7 +39,7 @@ function InitialLayout() {
           router.replace('/welcome');
         } else if (shopData && !isAuthenticated && segments[0] !== 'login' && segments[0] !== 'register') {
           router.replace('/login');
-        } else if (isAuthenticated && segments[0] === 'login') {
+        } else if (isAuthenticated && (segments[0] === 'login' || segments[0] === 'register')) {
           router.replace('/(tabs)');
         }
       } catch (error) {

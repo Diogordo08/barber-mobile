@@ -53,7 +53,7 @@ export const api = {
 
   updateUser: async (data: { name: string; email: string }) => {
     const response = await apiInstance.put('/user', data);
-    return response.data;
+    return response.data.user;
   },
 
   // --- DADOS PÚBLICOS ---
@@ -143,6 +143,12 @@ getMyAppointments: async () => {
   // Cancela assinatura ativa
   cancelSubscription: async () => {
     const response = await apiInstance.post('/subscribe/cancel');
+    return response.data;
+  },
+
+  // --- SUPORTE ---
+  createReport: async (data: { type: 'bug' | 'suggestion' | 'other'; title: string; description: string }) => {
+    const response = await apiInstance.post('/support/report', data);
     return response.data;
   },
 

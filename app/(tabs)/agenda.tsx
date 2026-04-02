@@ -126,37 +126,37 @@ export default function AgendaScreen() {
     const timeStr = dateObj.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
 
     return (
-      <View style={styles.card}>
+      <View style={[styles.card, { backgroundColor: theme.surface, borderColor: theme.border }]}>
         <View style={styles.cardHeader}>
           <View style={[styles.badge, { backgroundColor: getStatusColor(item.status) + '20' }]}>
             <Text style={[styles.badgeText, { color: getStatusColor(item.status) }]}>
               {getStatusLabel(item.status)}
             </Text>
           </View>
-          <Text style={[styles.price, { color: theme.primary }]}>
-            R$ {Number(item.total_price || 0).toFixed(2)}
+          <Text style={[styles.price, { color: Number(item.total_price || 0) === 0 ? '#10b981' : theme.primary }]}>
+            {Number(item.total_price || 0) === 0 ? 'Pelo Plano' : `R$ ${Number(item.total_price).toFixed(2)}`}
           </Text>
         </View>
 
         <View style={styles.row}>
-          <User size={18} color="#64748b" />
-          <Text style={styles.text}>{item.barber?.name || 'Profissional'}</Text>
+          <User size={18} color={theme.textSecondary} />
+          <Text style={[styles.text, { color: theme.textSecondary }]}>{item.barber?.name || 'Profissional'}</Text>
         </View>
 
         <View style={styles.row}>
-          <Calendar size={18} color="#64748b" />
-          <Text style={styles.text}>{dateStr} às {timeStr}</Text>
+          <Calendar size={18} color={theme.textSecondary} />
+          <Text style={[styles.text, { color: theme.textSecondary }]}>{dateStr} às {timeStr}</Text>
         </View>
 
         <View style={styles.row}>
-          <MapPin size={18} color="#64748b" />
-          <Text style={styles.text}>{item.barbershop?.name || 'Barbearia'}</Text>
+          <MapPin size={18} color={theme.textSecondary} />
+          <Text style={[styles.text, { color: theme.textSecondary }]}>{item.barbershop?.name || 'Barbearia'}</Text>
         </View>
 
-        <View style={styles.divider} />
+        <View style={[styles.divider, { backgroundColor: theme.border }]} />
 
         <View style={styles.cardFooter}>
-          <Text style={styles.serviceName}>{item.service?.name}</Text>
+          <Text style={[styles.serviceName, { color: theme.text }]}>{item.service?.name}</Text>
           
           {tab === 'upcoming' && item.status !== 'canceled' && (
             <TouchableOpacity 
@@ -174,16 +174,16 @@ export default function AgendaScreen() {
 
   return (
     <View style={[styles.container, { backgroundColor: theme.background }]}>
-      <View style={styles.header}>
-        <Text style={styles.title}>Meus Agendamentos</Text>
+      <View style={[styles.header, { backgroundColor: theme.surface, borderBottomColor: theme.border }]}>
+        <Text style={[styles.title, { color: theme.text }]}>Meus Agendamentos</Text>
       </View>
 
-      <View style={styles.tabs}>
+      <View style={[styles.tabs, { backgroundColor: theme.surface, borderBottomColor: theme.border }]}>
         <TouchableOpacity 
           style={[styles.tabBtn, tab === 'upcoming' && { borderBottomColor: theme.primary, borderBottomWidth: 2 }]}
           onPress={() => setTab('upcoming')}
         >
-          <Text style={[styles.tabText, tab === 'upcoming' && { color: theme.primary, fontWeight: 'bold' }]}>
+          <Text style={[styles.tabText, { color: theme.textSecondary }, tab === 'upcoming' && { color: theme.primary, fontWeight: 'bold' }]}>
             Próximos
           </Text>
         </TouchableOpacity>
@@ -192,7 +192,7 @@ export default function AgendaScreen() {
           style={[styles.tabBtn, tab === 'history' && { borderBottomColor: theme.primary, borderBottomWidth: 2 }]}
           onPress={() => setTab('history')}
         >
-          <Text style={[styles.tabText, tab === 'history' && { color: theme.primary, fontWeight: 'bold' }]}>
+          <Text style={[styles.tabText, { color: theme.textSecondary }, tab === 'history' && { color: theme.primary, fontWeight: 'bold' }]}>
             Histórico
           </Text>
         </TouchableOpacity>
@@ -232,15 +232,15 @@ const styles = StyleSheet.create({
   container: { flex: 1 },
   center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   header: {
-    paddingTop: 60, paddingHorizontal: 20, paddingBottom: 20, backgroundColor: 'white',
-    borderBottomWidth: 1, borderBottomColor: '#f1f5f9'
+    paddingTop: 60, paddingHorizontal: 20, paddingBottom: 20,
+    borderBottomWidth: 1
   },
-  title: { fontSize: 22, fontWeight: 'bold', color: '#1e293b' },
-  tabs: { flexDirection: 'row', backgroundColor: 'white' },
+  title: { fontSize: 22, fontWeight: 'bold' },
+  tabs: { flexDirection: 'row', borderBottomWidth: 1 },
   tabBtn: { flex: 1, paddingVertical: 15, alignItems: 'center' },
-  tabText: { fontSize: 16, color: '#64748b' },
+  tabText: { fontSize: 16 },
   card: {
-    backgroundColor: 'white', borderRadius: 12, padding: 16, marginBottom: 16,
+    borderRadius: 12, padding: 16, marginBottom: 16,
     borderWidth: 1, borderColor: '#e2e8f0',
     shadowColor: '#000', shadowOpacity: 0.03, shadowRadius: 5, elevation: 2
   },

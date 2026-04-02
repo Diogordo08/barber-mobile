@@ -1,11 +1,13 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode, useCallback } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { User, AuthContextType, Barbershop } from '../types';
+import { User, AuthContextType, Barbershop, Subscription } from '../types';
 import { api, apiInstance } from '../services/api';
 
 interface AuthContextProps {
   user: User | null;
   shop: Barbershop | null;
+  subscription: Subscription | null;
+  loadingSubscription: boolean;
   loading: boolean;
   isAuthenticated: boolean;
   signIn: (email: string, password: string) => Promise<void>;
@@ -13,6 +15,7 @@ interface AuthContextProps {
   signOut: () => Promise<void>;
   updateUser: (data: Partial<User>) => Promise<void>;
   selectShop: (data: Barbershop) => Promise<void>;
+  refreshSubscription: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextProps>({} as AuthContextProps);
@@ -20,6 +23,8 @@ const AuthContext = createContext<AuthContextProps>({} as AuthContextProps);
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [shop, setShop] = useState<Barbershop | null>(null);
+  const [subscription, setSubscription] = useState<Subscription | null>(null);
+  const [loadingSubscription, setLoadingSubscription] = useState(true);
   const [loading, setLoading] = useState(true);
 
   // 1. Carregar dados salvos ao abrir o app
@@ -36,6 +41,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           // Injeta o token recuperado direto no Axios
           apiInstance.defaults.headers.common['Authorization'] = `Bearer ${storedToken}`;
           setUser(JSON.parse(storedUser));
+          // Busca assinatura em background
+          api.getSubscription()
+            .then(setSubscription)
+            .catch(() => setSubscription(null))
+            .finally(() => setLoadingSubscription(false));
+        } else {
+          setLoadingSubscription(false);
         }
 
         if (storedShop) {
@@ -129,6 +141,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     delete apiInstance.defaults.headers.common['Authorization'];
     setUser(null);
     setShop(null);
+    setSubscription(null);
+    setLoadingSubscription(false);
     
     await AsyncStorage.multiRemove([
       '@BarberSaaS:user', 
@@ -160,14 +174,26 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (!user) return;
     try {
       const updatedUserFromApi = await api.updateUser({ 
-        name: data.name || user.name, 
-        email: data.email || user.email 
+        name: data.name !== undefined ? data.name : user.name, 
+        email: data.email !== undefined ? data.email : user.email,
       });
-
       setUser(updatedUserFromApi);
       await AsyncStorage.setItem('@BarberSaaS:user', JSON.stringify(updatedUserFromApi));
     } catch (error) {
       throw new Error("Erro ao atualizar perfil.");
+    }
+  }
+
+  // 6. Atualizar Assinatura (chamado após checkout aprovado)
+  async function refreshSubscription() {
+    setLoadingSubscription(true);
+    try {
+      const sub = await api.getSubscription();
+      setSubscription(sub);
+    } catch {
+      setSubscription(null);
+    } finally {
+      setLoadingSubscription(false);
     }
   }
 
@@ -180,11 +206,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     <AuthContext.Provider value={{ 
       user, 
       shop,
+      subscription,
+      loadingSubscription,
       signIn, 
       signUp,
       signOut, 
       updateUser, 
       selectShop,
+      refreshSubscription,
       isAuthenticated: !!user,
       loading 
     }}>

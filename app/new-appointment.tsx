@@ -174,11 +174,11 @@ export default function NewAppointment() {
     <View style={[styles.container, { backgroundColor: theme.background }]}>
 
       {/* HEADER */}
-      <View style={styles.header}>
+      <View style={[styles.header, { backgroundColor: theme.surface }]}>
         <TouchableOpacity onPress={handleBack} style={styles.backButton}>
-          <ArrowLeft size={24} color="#1e293b" />
+          <ArrowLeft size={24} color={theme.text} />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>
+        <Text style={[styles.headerTitle, { color: theme.text }]}>
           {step === 1 && 'Escolha o Serviço'}
           {step === 2 && 'Escolha o Profissional'}
           {step === 3 && 'Data e Horário'}
@@ -188,7 +188,7 @@ export default function NewAppointment() {
       </View>
 
       {/* PROGRESSO */}
-      <View style={styles.progressContainer}>
+      <View style={[styles.progressContainer, { backgroundColor: theme.surface }]}>
         {[1, 2, 3, 4].map((s) => (
           <View
             key={s}
@@ -208,17 +208,18 @@ export default function NewAppointment() {
             key={service.id}
             style={[
               styles.card,
+              { backgroundColor: theme.surface, borderColor: theme.border },
               selectedService?.id === service.id && { borderColor: theme.primary, borderWidth: 2 }
             ]}
             onPress={() => setSelectedService(service)}
           >
             <View style={styles.cardRow}>
-              <View style={[styles.iconBox, { backgroundColor: '#f1f5f9' }]}>
-                <Scissors size={24} color="#64748b" />
+              <View style={[styles.iconBox, { backgroundColor: theme.background }]}>
+                <Scissors size={24} color={theme.textSecondary} />
               </View>
               <View style={{ flex: 1 }}>
-                <Text style={styles.cardTitle}>{service.name}</Text>
-                <Text style={styles.cardSubtitle}>
+                <Text style={[styles.cardTitle, { color: theme.text }]}>{service.name}</Text>
+                <Text style={[styles.cardSubtitle, { color: theme.textSecondary }]}>
                   {/* @ts-ignore */}
                   {service.duration_minutes || service.durationMinutes} min • R$ {Number(service.price).toFixed(2)}
                 </Text>
@@ -234,6 +235,7 @@ export default function NewAppointment() {
             key={barber.id}
             style={[
               styles.card,
+              { backgroundColor: theme.surface, borderColor: theme.border },
               selectedBarber?.id === barber.id && { borderColor: theme.primary, borderWidth: 2 }
             ]}
             onPress={() => setSelectedBarber(barber)}
@@ -242,13 +244,13 @@ export default function NewAppointment() {
               {storageUrl(barber.avatar) ? (
                 <Image source={{ uri: storageUrl(barber.avatar) }} style={styles.avatar} />
               ) : (
-                <View style={[styles.avatar, { backgroundColor: '#e2e8f0', justifyContent: 'center', alignItems: 'center' }]}>
-                  <User size={28} color="#94a3b8" />
+                <View style={[styles.avatar, { backgroundColor: theme.background, justifyContent: 'center', alignItems: 'center' }]}>
+                  <User size={28} color={theme.textSecondary} />
                 </View>
               )}
               <View style={{ flex: 1 }}>
-                <Text style={styles.cardTitle}>{barber.name}</Text>
-                <Text style={styles.cardSubtitle}>{barber.role}</Text>
+                <Text style={[styles.cardTitle, { color: theme.text }]}>{barber.name}</Text>
+                <Text style={[styles.cardSubtitle, { color: theme.textSecondary }]}>{barber.role}</Text>
               </View>
               {selectedBarber?.id === barber.id && <CheckCircle color={theme.primary} size={20} />}
             </View>
@@ -258,31 +260,32 @@ export default function NewAppointment() {
         {/* PASSO 3: DATA E HORA */}
         {step === 3 && (
           <View>
-            <Text style={styles.label}>Selecione o Dia</Text>
+            <Text style={[styles.label, { color: theme.text }]}>Selecione o Dia</Text>
             <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 20 }}>
               {nextDays.map(day => (
                 <TouchableOpacity
                   key={day.fullDate}
                   style={[
                     styles.dateChip,
-                    selectedDate === day.fullDate && { backgroundColor: theme.primary }
+                    { backgroundColor: theme.surface, borderColor: theme.border },
+                    selectedDate === day.fullDate && { backgroundColor: theme.primary, borderColor: theme.primary }
                   ]}
                   onPress={() => {
                     setSelectedDate(day.fullDate);
                     setSelectedTime('');
                   }}
                 >
-                  <Text style={[styles.dateWeek, selectedDate === day.fullDate && { color: 'white' }]}>
+                  <Text style={[styles.dateWeek, { color: theme.textSecondary }, selectedDate === day.fullDate && { color: 'white' }]}>
                     {day.weekDay}
                   </Text>
-                  <Text style={[styles.dateNumber, selectedDate === day.fullDate && { color: 'white' }]}>
+                  <Text style={[styles.dateNumber, { color: theme.text }, selectedDate === day.fullDate && { color: 'white' }]}>
                     {day.day}
                   </Text>
                 </TouchableOpacity>
               ))}
             </ScrollView>
 
-            <Text style={styles.label}>Horários Disponíveis</Text>
+            <Text style={[styles.label, { color: theme.text }]}>Horários Disponíveis</Text>
             
             {/* Lógica de UI Corrigida: Carregando vs Vazio */}
             {loadingSlots ? (
@@ -305,11 +308,12 @@ export default function NewAppointment() {
                     key={`slot-${slot}`}
                     style={[
                       styles.timeChip,
+                      { backgroundColor: theme.surface, borderColor: theme.border },
                       selectedTime === slot && { backgroundColor: theme.primary, borderColor: theme.primary }
                     ]}
                     onPress={() => setSelectedTime(slot)}
                   >
-                    <Text style={[styles.timeText, selectedTime === slot && { color: 'white' }]}>
+                    <Text style={[styles.timeText, { color: theme.text }, selectedTime === slot && { color: 'white' }]}>
                       {slot}
                     </Text>
                   </TouchableOpacity>
@@ -321,39 +325,39 @@ export default function NewAppointment() {
 
         {/* PASSO 4: RESUMO */}
         {step === 4 && (
-          <View style={styles.summaryCard}>
-            <Text style={styles.summaryTitle}>Resumo do Pedido</Text>
+          <View style={[styles.summaryCard, { backgroundColor: theme.surface }]}>
+            <Text style={[styles.summaryTitle, { color: theme.text }]}>Resumo do Pedido</Text>
             <View style={styles.summaryRow}>
               <Scissors size={20} color={theme.primary} />
               <View>
-                <Text style={styles.summaryLabel}>Serviço</Text>
-                <Text style={styles.summaryValue}>{selectedService?.name}</Text>
+                <Text style={[styles.summaryLabel, { color: theme.textSecondary }]}>Serviço</Text>
+                <Text style={[styles.summaryValue, { color: theme.text }]}>{selectedService?.name}</Text>
               </View>
             </View>
             <View style={styles.summaryRow}>
               <User size={20} color={theme.primary} />
               <View>
-                <Text style={styles.summaryLabel}>Profissional</Text>
-                <Text style={styles.summaryValue}>{selectedBarber?.name}</Text>
+                <Text style={[styles.summaryLabel, { color: theme.textSecondary }]}>Profissional</Text>
+                <Text style={[styles.summaryValue, { color: theme.text }]}>{selectedBarber?.name}</Text>
               </View>
             </View>
             <View style={styles.summaryRow}>
               <Calendar size={20} color={theme.primary} />
               <View>
-                <Text style={styles.summaryLabel}>Data</Text>
-                <Text style={styles.summaryValue}>{selectedDate.split('-').reverse().join('/')}</Text>
+                <Text style={[styles.summaryLabel, { color: theme.textSecondary }]}>Data</Text>
+                <Text style={[styles.summaryValue, { color: theme.text }]}>{selectedDate.split('-').reverse().join('/')}</Text>
               </View>
             </View>
             <View style={styles.summaryRow}>
               <Clock size={20} color={theme.primary} />
               <View>
-                <Text style={styles.summaryLabel}>Horário</Text>
-                <Text style={styles.summaryValue}>{selectedTime}</Text>
+                <Text style={[styles.summaryLabel, { color: theme.textSecondary }]}>Horário</Text>
+                <Text style={[styles.summaryValue, { color: theme.text }]}>{selectedTime}</Text>
               </View>
             </View>
-            <View style={styles.divider} />
+            <View style={[styles.divider, { backgroundColor: theme.border }]} />
             <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginTop: 10 }}>
-              <Text style={{ fontSize: 18, fontWeight: 'bold' }}>Total</Text>
+              <Text style={{ fontSize: 18, fontWeight: 'bold', color: theme.text }}>Total</Text>
               <Text style={{ fontSize: 18, fontWeight: 'bold', color: theme.primary }}>
                 R$ {Number(selectedService?.price).toFixed(2)}
               </Text>
@@ -365,7 +369,7 @@ export default function NewAppointment() {
       </ScrollView>
 
       {/* BOTÃO FLUTUANTE */}
-      <View style={styles.footer}>
+      <View style={[styles.footer, { backgroundColor: theme.surface, borderTopColor: theme.border }]}>
         <TouchableOpacity
           style={[
             styles.footerBtn,
@@ -404,47 +408,45 @@ const styles = StyleSheet.create({
   header: {
     paddingTop: 60, paddingHorizontal: 20, paddingBottom: 20,
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    backgroundColor: 'white',
   },
   backButton: { padding: 5 },
-  headerTitle: { fontSize: 18, fontWeight: 'bold', color: '#1e293b' },
+  headerTitle: { fontSize: 18, fontWeight: 'bold' },
   progressContainer: {
-    flexDirection: 'row', gap: 8, paddingHorizontal: 20, paddingBottom: 20, backgroundColor: 'white',
+    flexDirection: 'row', gap: 8, paddingHorizontal: 20, paddingBottom: 20,
   },
   progressDot: { height: 4, borderRadius: 2 },
   content: { padding: 20 },
   card: {
-    backgroundColor: 'white', padding: 15, borderRadius: 12, marginBottom: 15,
-    borderWidth: 1, borderColor: '#e2e8f0',
+    padding: 15, borderRadius: 12, marginBottom: 15,
+    borderWidth: 1,
   },
   cardRow: { flexDirection: 'row', alignItems: 'center', gap: 15 },
   iconBox: { padding: 10, borderRadius: 8 },
   avatar: { width: 50, height: 50, borderRadius: 25 },
-  cardTitle: { fontSize: 16, fontWeight: 'bold', color: '#1e293b' },
-  cardSubtitle: { fontSize: 14, color: '#64748b', marginTop: 2 },
-  label: { fontSize: 16, fontWeight: '600', color: '#334155', marginBottom: 10, marginTop: 10 },
+  cardTitle: { fontSize: 16, fontWeight: 'bold' },
+  cardSubtitle: { fontSize: 14, marginTop: 2 },
+  label: { fontSize: 16, fontWeight: '600', marginBottom: 10, marginTop: 10 },
   dateChip: {
     width: 60, height: 70, justifyContent: 'center', alignItems: 'center',
-    backgroundColor: 'white', borderRadius: 12, marginRight: 10,
-    borderWidth: 1, borderColor: '#e2e8f0',
+    borderRadius: 12, marginRight: 10, borderWidth: 1,
   },
-  dateWeek: { fontSize: 12, color: '#64748b', textTransform: 'uppercase' },
-  dateNumber: { fontSize: 20, fontWeight: 'bold', color: '#1e293b' },
+  dateWeek: { fontSize: 12, textTransform: 'uppercase' },
+  dateNumber: { fontSize: 20, fontWeight: 'bold' },
   grid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
   timeChip: {
-    width: '30%', paddingVertical: 12, backgroundColor: 'white',
-    borderRadius: 8, borderWidth: 1, borderColor: '#e2e8f0', alignItems: 'center',
+    width: '30%', paddingVertical: 12,
+    borderRadius: 8, borderWidth: 1, alignItems: 'center',
   },
-  timeText: { fontWeight: '600', color: '#334155' },
-  summaryCard: { backgroundColor: 'white', padding: 20, borderRadius: 16 },
+  timeText: { fontWeight: '600' },
+  summaryCard: { padding: 20, borderRadius: 16 },
   summaryTitle: { fontSize: 18, fontWeight: 'bold', marginBottom: 20, textAlign: 'center' },
   summaryRow: { flexDirection: 'row', alignItems: 'center', gap: 15, marginBottom: 20 },
-  summaryLabel: { fontSize: 12, color: '#64748b' },
-  summaryValue: { fontSize: 16, fontWeight: 'bold', color: '#1e293b' },
-  divider: { height: 1, backgroundColor: '#e2e8f0', marginVertical: 10 },
+  summaryLabel: { fontSize: 12 },
+  summaryValue: { fontSize: 16, fontWeight: 'bold' },
+  divider: { height: 1, marginVertical: 10 },
   footer: {
     position: 'absolute', bottom: 0, left: 0, right: 0, padding: 20,
-    backgroundColor: 'white', borderTopWidth: 1, borderTopColor: '#f1f5f9',
+    borderTopWidth: 1,
   },
   footerBtn: {
     padding: 16, borderRadius: 12, flexDirection: 'row',

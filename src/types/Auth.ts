@@ -4,6 +4,7 @@ export interface User {
   email: string;
   role: string;
   avatar?: string;
+  barbershop_id: number | null;
 }
 
 export interface AuthContextType {

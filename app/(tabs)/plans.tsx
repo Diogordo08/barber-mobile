@@ -8,25 +8,21 @@ import { Crown, Check, CreditCard, Calendar, Star, AlertCircle } from 'lucide-re
 import { useAuth } from '../../src/contexts/AuthContext';
 import { useTheme } from '../../src/contexts/ThemeContext';
 import { api } from '../../src/services/api';
-import { Plan, Subscription } from '../../src/types';
+import { Plan } from '../../src/types';
 
 export default function PlansTab() {
   const router = useRouter();
   const { theme } = useTheme();
-  const { shop, user } = useAuth();
+  const { shop, user, subscription } = useAuth();
 
   const [loading, setLoading] = useState(true);
-  const [subscription, setSubscription] = useState<Subscription | null>(null);
   const [plans, setPlans] = useState<Plan[]>([]);
   const [refreshing, setRefreshing] = useState(false);
 
   async function loadData() {
     if (!shop?.slug) return;
     try {
-      const subData = await api.getSubscription();
-      setSubscription(subData);
-
-      if (!subData) {
+      if (!subscription) {
         const plansData = await api.getPlans(shop.slug);
         setPlans(plansData);
       }
@@ -155,7 +151,7 @@ export default function PlansTab() {
                   { 
                     backgroundColor: theme.surface, 
                     borderColor: theme.border,
-                    shadowColor: theme.isDark ? "#000" : "#cbd5e1"
+                    shadowColor: theme.background === '#0f172a' ? "#000" : "#cbd5e1"
                   }
                 ]}
                 activeOpacity={0.9}

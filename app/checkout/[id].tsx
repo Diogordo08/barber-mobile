@@ -146,7 +146,7 @@ export default function CheckoutScreen() {
   const { id } = useLocalSearchParams();
   const router = useRouter();
   const { theme } = useTheme();
-  const { shop } = useAuth();
+  const { shop, refreshSubscription } = useAuth();
 
   const [plan, setPlan]               = useState<Plan | null>(null);
   const [loading, setLoading]         = useState(true);
@@ -173,6 +173,7 @@ export default function CheckoutScreen() {
         if (sub?.status === 'active') {
           clearInterval(pollingRef.current!);
           setPollingActive(false);
+          await refreshSubscription();
           Alert.alert('Confirmado! ✅', 'Sua assinatura está ativa. Bem-vindo ao clube!', [
             { text: 'OK', onPress: () => router.replace('/(tabs)/plans') }
           ]);

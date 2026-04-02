@@ -18,24 +18,24 @@ export default function HomeScreen() {
   const router = useRouter();
   const { user, shop } = useAuth();
   const { theme } = useTheme();
+  const { subscription } = useAuth();
 
   const [barbers, setBarbers] = useState<Barber[]>([]);
   const [services, setServices] = useState<ServiceItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [isVip, setIsVip] = useState(false);
+
+  const isVip = subscription?.status === 'active';
 
   async function loadData() {
     if (!shop?.slug) return;
     try {
-      const [barbersData, servicesData, subscription] = await Promise.all([
+      const [barbersData, servicesData] = await Promise.all([
         api.getBarbers(shop.slug),
         api.getServices(shop.slug),
-        api.getSubscription(),
       ]);
       setBarbers(barbersData);
       setServices(servicesData);
-      setIsVip(subscription?.status === 'active');
     } catch (error) {
       console.log("Erro ao carregar home:", error);
     } finally {
@@ -345,6 +345,7 @@ const styles = StyleSheet.create({
   // === SERVICES ===
   servicesContainer: { marginHorizontal: 20, borderRadius: 20, padding: 10 },
   serviceItem: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 16 },
+  serviceInfo: { flex: 1 },
   serviceName: { fontSize: 16, fontWeight: '600', marginBottom: 4 },
   serviceDuration: { fontSize: 13, color: '#94a3b8', display: 'flex', alignItems: 'center' },
   priceTag: { 

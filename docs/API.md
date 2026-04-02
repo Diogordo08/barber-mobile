@@ -35,6 +35,7 @@ Authorization: Bearer <token>
 | Rotas protegidas (geral) | 60 req/min |
 | Assinaturas | 10 req/min |
 | Agendamentos | 20 req/min |
+| Suporte / Reporte | 5 req/min |
 | Rotas públicas da barbearia | 30 req/min |
 
 ---
@@ -50,6 +51,7 @@ Authorization: Bearer <token>
 7. [Agendamentos](#7-agendamentos)
 8. [Assinaturas](#8-assinaturas)
 9. [Webhook](#9-webhook)
+10. [Suporte](#10-suporte)
 
 ---
 
@@ -76,9 +78,11 @@ Registra um novo usuário. O `role` é sempre forçado para `client`.
 {
   "access_token": "1|abc...",
   "token_type": "Bearer",
-  "user": { "id": 1, "name": "João", "email": "joao@email.com", "role": "client" }
+  "user": { "id": 1, "name": "João", "email": "joao@email.com", "role": "client", "barbershop_id": null }
 }
 ```
+
+> ⚠️ `barbershop_id` é sempre `null` após o registro — o vínculo com uma barbearia só ocorre na primeira assinatura de plano.
 
 ---
 
@@ -99,7 +103,7 @@ Autentica um usuário existente.
 {
   "access_token": "2|xyz...",
   "token_type": "Bearer",
-  "user": { "id": 1, "name": "João", "email": "joao@email.com" }
+  "user": { "id": 1, "name": "João", "email": "joao@email.com", "barbershop_id": 1 }
 }
 ```
 
@@ -127,7 +131,7 @@ Revoga o token atual do usuário autenticado.
 
 Retorna os dados do usuário autenticado.
 
-**Resposta `200 OK`** — Objeto `User` completo (sem `password`).
+**Resposta `200 OK`** — Objeto `User` completo (sem `password`). Inclui `barbershop_id`.
 
 ---
 
@@ -571,6 +575,48 @@ x-request-id: <uuid>
 
 ---
 
+## 10. Suporte
+
+### `POST /api/support/report` 🔒
+
+Envia um reporte de problema ou sugestão a partir do **app mobile**. Requer autenticação. O admin do SaaS recebe uma notificação por e-mail e o reporte aparece no painel administrativo com a origem identificada como **"App Mobile"**.
+
+> ⚠️ Rate limit: **5 requisições por minuto** por usuário para evitar spam.
+
+**Body (JSON)**
+
+| Campo | Tipo | Obrigatório | Regras |
+|---|---|---|---|
+| `type` | string | ✅ | `"bug"`, `"suggestion"` ou `"other"` |
+| `title` | string | ✅ | max 150 caracteres |
+| `description` | string | ✅ | max 2000 caracteres |
+
+**Resposta `201 Created`**
+
+```json
+{
+  "message": "Reporte enviado com sucesso! Obrigado pelo feedback.",
+  "report": {
+    "id": 5,
+    "type": "bug",
+    "title": "Botão de pagamento não abre",
+    "status": "open"
+  }
+}
+```
+
+**Erros**
+
+| Código | Motivo |
+|---|---|
+| `401` | Token inválido ou ausente |
+| `422` | Campo obrigatório ausente ou `type` inválido |
+| `429` | Rate limit excedido (5/min) |
+
+> **Nota para o frontend:** O campo `barbershop_id` é extraído automaticamente do usuário autenticado — não precisa enviar. O admin verá o reporte no painel com badge "📱 App Mobile" e consegue filtrar por origem.
+
+---
+
 ## Modelos de Dados
 
 ### User
@@ -583,7 +629,9 @@ x-request-id: <uuid>
 | `role` | enum | `admin`, `barber`, `client` |
 | `cpf` | string (encrypted) | CPF criptografado |
 | `phone` | string (encrypted) | Telefone criptografado |
-| `barbershop_id` | int\|null | Barbearia vinculada (cliente) |
+| `barbershop_id` | int\|null | Barbearia vinculada. `null` = assinatura ainda não criada |
+
+> ⚠️ `barbershop_id` é retornado em **todas** as respostas que contm o objeto `user` (login, registro, `GET /api/user`). Declare-o como `number | null` no tipo TypeScript do frontend. O valor é automaticamente preenchido pelo backend na primeira assinatura.
 
 ### Barbershop (Barbearia) — campos públicos
 
@@ -619,6 +667,17 @@ x-request-id: <uuid>
 | `uses_this_month` | int | Cortes usados no mês corrente |
 | `remaining_cuts` | int | Cortes restantes (valor armazenado no banco) |
 | `expires_at` | datetime | Data de expiração da assinatura |
+
+### Report (Reporte de Suporte)
+
+| Campo | Tipo | Descrição |
+|---|---|---|
+| `id` | int | ID do reporte |
+| `type` | enum | `bug` · `suggestion` · `other` |
+| `title` | string | Título resumido (max 150 chars) |
+| `status` | enum | `open` · `in_progress` · `resolved` — definido pelo admin do SaaS |
+
+> Campos `user_id`, `barbershop_id` e `source` são preenchidos automaticamente pelo backend. O app não precisa e **não deve** enviar esses campos.
 
 ---
 

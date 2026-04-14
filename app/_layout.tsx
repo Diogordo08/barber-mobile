@@ -1,6 +1,6 @@
 import { cssInterop } from "nativewind";
 import { StyleSheet, View, ActivityIndicator } from "react-native";
-import { useEffect, useState } from 'react';
+import { useEffect } from 'react';
 import { Slot, useRouter, useSegments } from 'expo-router';
 import { AuthProvider, useAuth } from '../src/contexts/AuthContext';
 import { ThemeProvider } from '../src/contexts/ThemeContext';
@@ -21,38 +21,42 @@ try {
 
 // Componente Interno: Proteção de Rotas
 function InitialLayout() {
-  const { isAuthenticated, loading } = useAuth();
+  const { isAuthenticated, loading, shop } = useAuth();
   const segments = useSegments();
   const router = useRouter();
-  const [isCheckingSlug, setIsCheckingSlug] = useState(true);
-
   useEffect(() => {
-    async function checkSlug() {
-      try {
-        const shopData = await AsyncStorage.getItem('@BarberSaaS:shop');
-        const inWelcome = segments[0] === 'welcome';
+    if (loading) return;
 
-        if (loading) return;
+    const currentRoute = segments[0] ?? '';
+    const inTabsRoute = currentRoute === '(tabs)';
+    const inWelcome = currentRoute === 'welcome';
+    const inAuthRoute = currentRoute === 'login' || currentRoute === 'register';
+    const hasValidShop = !!shop?.slug;
 
-        // Regras de Redirecionamento
-        if (!shopData && !inWelcome) {
+    try {
+      if (!hasValidShop) {
+        if (!inWelcome) {
           router.replace('/welcome');
-        } else if (shopData && !isAuthenticated && segments[0] !== 'login' && segments[0] !== 'register') {
-          router.replace('/login');
-        } else if (isAuthenticated && (segments[0] === 'login' || segments[0] === 'register')) {
-          router.replace('/(tabs)');
         }
-      } catch (error) {
-        console.error("Erro ao verificar slug:", error);
-      } finally {
-        setIsCheckingSlug(false);
+        return;
       }
+
+      if (!isAuthenticated) {
+        if (!inAuthRoute) {
+          router.replace('/login');
+        }
+        return;
+      }
+
+      if (!inTabsRoute) {
+        router.replace('/(tabs)');
+      }
+    } catch (error) {
+      console.error("Erro ao verificar slug:", error);
     }
+  }, [isAuthenticated, loading, router, segments, shop]);
 
-    checkSlug();
-  }, [isAuthenticated, loading, segments]);
-
-  if (loading || isCheckingSlug) {
+  if (loading) {
     return (
       <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#0f172a' }}>
         <ActivityIndicator size="large" color="#2563eb" />

@@ -27,6 +27,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loadingSubscription, setLoadingSubscription] = useState(true);
   const [loading, setLoading] = useState(true);
 
+  function isValidStoredShop(data: any): data is Barbershop {
+    return !!data && typeof data === 'object' && typeof data.slug === 'string' && data.slug.trim().length > 0;
+  }
+
   // 1. Carregar dados salvos ao abrir o app
   useEffect(() => {
     async function loadStorageData() {
@@ -52,12 +56,30 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
         if (storedShop) {
           const parsedShop = JSON.parse(storedShop);
-          setShop(parsedShop);
-          // Atualiza em background para pegar campos novos (description, opening_hours, etc.)
-          api.getBarbershop(parsedShop.slug).then(async (freshShop) => {
-            setShop(freshShop);
-            await AsyncStorage.setItem('@BarberSaaS:shop', JSON.stringify(freshShop));
-          }).catch(() => { /* mantém cache se offline */ });
+
+          if (isValidStoredShop(parsedShop)) {
+            setShop(parsedShop);
+
+            // Atualiza em background para pegar campos novos (description, opening_hours, etc.)
+            api.getBarbershop(parsedShop.slug)
+              .then(async (freshShop) => {
+                setShop(freshShop);
+                await AsyncStorage.setItem('@BarberSaaS:shop', JSON.stringify(freshShop));
+              })
+              .catch(async (error: any) => {
+                const status = error?.response?.status;
+
+                // Se a barbearia não existe mais/slug mudou, limpa o cache inválido
+                if (status === 404) {
+                  setShop(null);
+                  await AsyncStorage.removeItem('@BarberSaaS:shop');
+                }
+                // Outros erros mantêm o cache local (ex: offline)
+              });
+          } else {
+            setShop(null);
+            await AsyncStorage.removeItem('@BarberSaaS:shop');
+          }
         }
 
       } catch (error) {
@@ -198,6 +220,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }
 
   async function selectShop(data: Barbershop) {
+    if (!isValidStoredShop(data)) {
+      setShop(null);
+      await AsyncStorage.removeItem('@BarberSaaS:shop');
+      throw new Error('Barbearia inválida.');
+    }
+
     setShop(data);
     await AsyncStorage.setItem('@BarberSaaS:shop', JSON.stringify(data));
   }

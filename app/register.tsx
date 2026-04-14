@@ -10,6 +10,15 @@ export default function Register() {
   const { theme } = useTheme();
   const { signUp } = useAuth(); // Usaremos a nova função
 
+  const handleBack = React.useCallback(() => {
+    if (router.canGoBack()) {
+      router.back();
+      return;
+    }
+
+    router.replace('/welcome');
+  }, [router]);
+
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -49,7 +58,7 @@ export default function Register() {
 
   return (
     <ScrollView style={[styles.container, { backgroundColor: '#f8fafc' }]} contentContainerStyle={{ flexGrow: 1, justifyContent: 'center' }}>
-      <TouchableOpacity onPress={() => router.back()} style={styles.backBtn} disabled={loading}>
+      <TouchableOpacity onPress={handleBack} style={styles.backBtn} disabled={loading}>
         <ArrowLeft size={24} color="#64748b" />
       </TouchableOpacity>
 
@@ -90,7 +99,7 @@ export default function Register() {
           <Lock size={20} color="#94a3b8" />
           <TextInput
             style={styles.input}
-            placeholder="Crie uma senha (mín. 8 caracteres)"
+            placeholder="Crie uma senha (mín. 10 caracteres)"
             placeholderTextColor="#94a3b8"
             value={password}
             onChangeText={setPassword}

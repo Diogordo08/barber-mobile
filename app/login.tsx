@@ -11,6 +11,15 @@ import { useTheme } from '../src/contexts/ThemeContext';
 
 export default function LoginScreen() {
   const router = useRouter();
+
+  const handleBack = React.useCallback(() => {
+    if (router.canGoBack()) {
+      router.back();
+      return;
+    }
+
+    router.replace('/welcome');
+  }, [router]);
   const { signIn, shop } = useAuth(); // 'shop' vem do contexto (da tela anterior)
   const { theme } = useTheme();
 
@@ -19,7 +28,19 @@ export default function LoginScreen() {
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
 
+  React.useEffect(() => {
+    if (!shop?.slug) {
+      router.replace('/welcome');
+    }
+  }, [router, shop]);
+
   async function handleLogin() {
+    if (!shop?.slug) {
+      Alert.alert("Barbearia inválida", "Selecione novamente a barbearia antes de entrar.");
+      router.replace('/welcome');
+      return;
+    }
+
     if (!email || !password) {
       Alert.alert("Atenção", "Preencha todos os campos.");
       return;
@@ -56,7 +77,7 @@ export default function LoginScreen() {
           >
             
             {/* Header / Voltar */}
-            <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
+            <TouchableOpacity onPress={handleBack} style={styles.backBtn}>
               <ArrowLeft size={24} color="white" />
             </TouchableOpacity>
 
@@ -107,10 +128,7 @@ export default function LoginScreen() {
                   </TouchableOpacity>
                 </View>
 
-                {/* Esqueci minha senha */}
-                <TouchableOpacity style={styles.forgotBtn} onPress={() => router.push('/forgot-password')}>
-                  <Text style={styles.forgotText}>Esqueceu a senha?</Text>
-                </TouchableOpacity>
+                {/* Esqueci minha senha (desabilitado) */}
 
               </View>
 

@@ -1,11 +1,11 @@
 {
   "expo": {
-    "name": "barber-mobile",
-    "slug": "barber-mobile",
-    "scheme": "barbersaas",
+    "name": "barber-easy",
+    "slug": "barber-easy",
+    "scheme": "barbereasy",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/icon.png",
+    "icon": "./assets/icon2.png",
     "userInterfaceStyle": "light",
     "newArchEnabled": true,
     "splash": {
@@ -17,12 +17,17 @@
       "supportsTablet": true
     },
     "android": {
+      "package": "com.buja23.barbereasy",
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#ffffff"
       },
       "edgeToEdgeEnabled": true,
-      "predictiveBackGestureEnabled": false
+      "predictiveBackGestureEnabled": false,
+      "permissions": [
+        "android.permission.CAMERA",
+        "android.permission.RECORD_AUDIO"
+      ]
     },
     "web": {
       "favicon": "./assets/favicon.png"
@@ -35,6 +40,13 @@
           "cameraPermission": "Precisamos da câmera para escanear o QR Code da barbearia."
         }
       ]
-    ]
+    ],
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "d92183d5-46a5-4f73-a81a-a18b401b70b1"
+      }
+    },
+    "owner": "buja23"
   }
 }

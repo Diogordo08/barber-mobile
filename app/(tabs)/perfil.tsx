@@ -44,7 +44,7 @@ export default function ProfileScreen() {
         Alert.alert('Erro', 'Não foi possível abrir o WhatsApp.')
       );
     } else {
-      Alert.alert(shop?.name || 'Barbearia', shop?.phone ? `Telefone: ${shop.phone}` : 'Entre em contacto na recepção.');
+      Alert.alert(shop?.name || 'Barbearia', shop?.phone ? `Telefone: ${shop.phone}` : 'Entre em contato na recepção.');
     }
   }
 
@@ -125,7 +125,7 @@ export default function ProfileScreen() {
   function handleLogout() {
     Alert.alert(
       "Sair da conta",
-      "Tem a certeza que deseja sair?",
+      "Tem certeza que deseja sair?",
       [
         { text: "Cancelar", style: "cancel" },
         { 

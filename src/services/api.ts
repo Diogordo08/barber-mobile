@@ -2,8 +2,8 @@ import axios from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { User, Barbershop, Barber, ServiceItem, Appointment } from '../types'; 
 
-const BASE_URL = 'https://barbearia-api.on-forge.com/api';
-const STORAGE_URL = 'https://barbearia-api.on-forge.com/storage';
+const BASE_URL = 'https://www.barbereasy.com.br/api';
+const STORAGE_URL = 'https://www.barbereasy.com.br/storage';
 
 /** Converte caminho relativo retornado pelo backend (ex: "avatars/foo.jpg") em URL completa. */
 export function storageUrl(path: string | null | undefined): string | undefined {

@@ -1,4 +1,4 @@
-﻿import React, { useState } from 'react';
+﻿import React, { useEffect, useState } from 'react';
 import { 
   View, Text, StyleSheet, TouchableOpacity, ImageBackground, StatusBar, 
   Modal, TextInput, ActivityIndicator, Alert, KeyboardAvoidingView, Platform 
@@ -13,7 +13,7 @@ import { api } from '../src/services/api';
 export default function LandingScreen() {
   const router = useRouter();
   const { theme } = useTheme();
-  const { selectShop } = useAuth();
+  const { selectShop, signOut } = useAuth();
 
   const [modalVisible, setModalVisible] = useState(false);
   const [scannerVisible, setScannerVisible] = useState(false);
@@ -22,6 +22,12 @@ export default function LandingScreen() {
   const [loading, setLoading] = useState(false);
 
   const [permission, requestPermission] = useCameraPermissions();
+
+  useEffect(() => {
+    signOut().catch((error) => {
+      console.log('Erro ao resetar sessão na welcome:', error);
+    });
+  }, [signOut]);
 
   async function enterWithSlug(slugValue: string) {
     if (!slugValue.trim()) return;
@@ -34,10 +40,10 @@ export default function LandingScreen() {
         setScannerVisible(false);
         router.push('/login');
       } else {
-        Alert.alert("NÃ£o encontrada", "Nenhuma barbearia encontrada com este cÃ³digo.");
+        Alert.alert("Não encontrada", "Nenhuma barbearia encontrada com este código.");
       }
     } catch (error) {
-      Alert.alert("Erro", "Falha ao buscar barbearia. Verifique o cÃ³digo.");
+      Alert.alert("Erro", "Falha ao buscar barbearia. Verifique o código.");
     } finally {
       setLoading(false);
       setScanning(false);
@@ -48,7 +54,7 @@ export default function LandingScreen() {
     if (!permission?.granted) {
       const result = await requestPermission();
       if (!result.granted) {
-        Alert.alert("PermissÃ£o negada", "Permita o acesso Ã  cÃ¢mera nas configuraÃ§Ãµes do dispositivo.");
+        Alert.alert("Permissão negada", "Permita o acesso à câmera nas configurações do dispositivo.");
         return;
       }
     }
@@ -79,10 +85,10 @@ export default function LandingScreen() {
       >
         <View style={styles.overlay}>
           <View style={styles.header}>
-            <Text style={styles.brand}>BARBER<Text style={{ color: theme.primary }}>SaaS</Text></Text>
+            <Text style={styles.brand}>Barber<Text style={{ color: theme.primary }}>Easy</Text></Text>
             <Text style={styles.title}>Encontre sua Barbearia</Text>
             <Text style={styles.subtitle}>
-              Escaneie o QR Code no balcÃ£o ou digite o cÃ³digo da barbearia para comeÃ§ar.
+              Escaneie o QR Code no balcão ou digite o código da barbearia para começar.
             </Text>
           </View>
 
@@ -93,7 +99,7 @@ export default function LandingScreen() {
               </View>
               <View>
                 <Text style={styles.btnTitle}>Escanear QR Code</Text>
-                <Text style={styles.btnDesc}>Use a cÃ¢mera do celular</Text>
+                <Text style={styles.btnDesc}>Use a câmera do celular</Text>
               </View>
               <ArrowRight size={20} color="rgba(255,255,255,0.5)" style={{ marginLeft: 'auto' }} />
             </TouchableOpacity>
@@ -103,7 +109,7 @@ export default function LandingScreen() {
                 <Keyboard size={32} color={theme.primary} />
               </View>
               <View>
-                <Text style={styles.btnTitle}>Digitar CÃ³digo</Text>
+                <Text style={styles.btnTitle}>Digitar Código</Text>
                 <Text style={styles.btnDesc}>Insira o ID manualmente</Text>
               </View>
               <ArrowRight size={20} color="rgba(255,255,255,0.5)" style={{ marginLeft: 'auto' }} />
@@ -154,9 +160,9 @@ export default function LandingScreen() {
           behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
           style={styles.modalContainer}
         >
-          <View style={[styles.modalContent, { backgroundColor: theme.isDark ? '#1e293b' : 'white' }]}>
+          <View style={[styles.modalContent, { backgroundColor: theme.surface }]}>
             <View style={styles.modalHeader}>
-              <Text style={[styles.modalTitle, { color: theme.text }]}>CÃ³digo da Loja</Text>
+              <Text style={[styles.modalTitle, { color: theme.text }]}>Código da Loja</Text>
               <TouchableOpacity onPress={() => setModalVisible(false)}>
                 <X size={24} color={theme.textSecondary} />
               </TouchableOpacity>

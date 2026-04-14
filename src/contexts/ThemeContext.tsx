@@ -1,5 +1,4 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
-import { useColorScheme as useDeviceColorScheme } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 // Paleta de Cores
@@ -43,10 +42,9 @@ interface ThemeContextData {
 const ThemeContext = createContext<ThemeContextData>({} as ThemeContextData);
 
 export function ThemeProvider({ children }: { children: ReactNode }) {
-  const deviceScheme = useDeviceColorScheme();
-  const [isDark, setIsDark] = useState(deviceScheme === 'dark');
+  const [isDark, setIsDark] = useState(true); // Padrão: modo escuro
 
-  // Carrega preferência salva
+  // Carrega preferência salva (mantém se o usuário já escolheu)
   useEffect(() => {
     async function loadTheme() {
       const savedTheme = await AsyncStorage.getItem('@BarberSaaS:theme');

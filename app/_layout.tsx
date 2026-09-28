@@ -1,11 +1,9 @@
-import { cssInterop } from "nativewind";
 import { StyleSheet, View, ActivityIndicator } from "react-native";
 import { useEffect } from 'react';
 import { Slot, useRouter, useSegments } from 'expo-router';
 import { AuthProvider, useAuth } from '../src/contexts/AuthContext';
 import { ThemeProvider } from '../src/contexts/ThemeContext';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import "../global.css";
 
 // Configuração para evitar crash do NativeWind na Web
@@ -28,7 +26,6 @@ function InitialLayout() {
     if (loading) return;
 
     const currentRoute = segments[0] ?? '';
-    const inTabsRoute = currentRoute === '(tabs)';
     const inWelcome = currentRoute === 'welcome';
     const inAuthRoute = currentRoute === 'login' || currentRoute === 'register';
     const hasValidShop = !!shop?.slug;
@@ -42,13 +39,13 @@ function InitialLayout() {
       }
 
       if (!isAuthenticated) {
-        if (!inAuthRoute) {
+        if (!inAuthRoute && !inWelcome) {
           router.replace('/login');
         }
         return;
       }
 
-      if (!inTabsRoute) {
+      if (inAuthRoute || inWelcome || currentRoute === '') {
         router.replace('/(tabs)');
       }
     } catch (error) {

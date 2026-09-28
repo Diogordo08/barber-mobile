@@ -1,18 +1,16 @@
 import React, { useEffect, useState } from 'react';
 import { 
   View, Text, StyleSheet, ScrollView, Image, TouchableOpacity, 
-  ImageBackground, ActivityIndicator, StatusBar, FlatList, RefreshControl, Dimensions
+  ImageBackground, ActivityIndicator, StatusBar, Alert, FlatList, RefreshControl
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { 
-  Calendar, Crown, MapPin, Clock, Star, ChevronRight, Phone, Scissors, Search 
+  Calendar, Crown, MapPin, Clock, Star, ChevronRight, Phone, Scissors
 } from 'lucide-react-native';
 import { useAuth } from '../../src/contexts/AuthContext';
 import { useTheme } from '../../src/contexts/ThemeContext';
-import { api, storageUrl } from '../../src/services/api';
+import { api, storageUrl, apiErrorMessage, isSessionExpired } from '../../src/services/api';
 import { Barber, ServiceItem } from '../../src/types';
-
-const { width } = Dimensions.get('window');
 
 export default function HomeScreen() {
   const router = useRouter();
@@ -37,7 +35,7 @@ export default function HomeScreen() {
       setBarbers(barbersData);
       setServices(servicesData);
     } catch (error) {
-      console.log("Erro ao carregar home:", error);
+      if (!isSessionExpired(error)) Alert.alert("Barbearia", apiErrorMessage(error, "Não foi possível carregar a barbearia. Tente novamente."));
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -188,8 +186,7 @@ export default function HomeScreen() {
                     <Text style={[styles.serviceName, { color: theme.text }]}>{service.name}</Text>
                     <Text style={styles.serviceDuration}>
                       <Clock size={12} color="#94a3b8" />{' '}
-                      {/* @ts-ignore */}
-                      {service.duration_minutes || service.durationMinutes || 30} min
+                      {service.duration_minutes} min
                     </Text>
                   </View>
                   <View style={styles.priceTag}>

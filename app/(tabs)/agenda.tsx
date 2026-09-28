@@ -1,8 +1,8 @@
 import React, { useState, useCallback } from 'react';
 import { View, Text, StyleSheet, FlatList, TouchableOpacity, ActivityIndicator, RefreshControl, Alert, Platform } from 'react-native';
 import { useFocusEffect, useRouter } from 'expo-router';
-import { Calendar, Clock, MapPin, User, AlertCircle, XCircle } from 'lucide-react-native';
-import { api } from '../../src/services/api';
+import { Calendar, MapPin, User, AlertCircle, XCircle } from 'lucide-react-native';
+import { api, apiErrorMessage, isSessionExpired } from '../../src/services/api';
 import { useTheme } from '../../src/contexts/ThemeContext';
 import { Appointment } from '../../src/types';
 
@@ -18,10 +18,10 @@ export default function AgendaScreen() {
   async function fetchAppointments() {
     try {
       const data = await api.getMyAppointments();
-      const list = Array.isArray(data) ? data : (data.data || []);
+      const list = data;
       setAppointments(list);
     } catch (error) {
-      console.log("Erro ao buscar agenda:", error);
+      if (!isSessionExpired(error)) Alert.alert("Agenda", apiErrorMessage(error, "Não foi possível carregar sua agenda. Tente novamente."));
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -40,15 +40,12 @@ export default function AgendaScreen() {
       setLoading(true); // Mostra spinner
       await api.cancelAppointment(id);
       
-      // Pequeno delay para garantir que o banco atualizou
-      setTimeout(() => {
-        Alert.alert("Sucesso", "Agendamento cancelado!");
-        fetchAppointments(); 
-      }, 500);
+      Alert.alert("Sucesso", "Agendamento cancelado!");
+      await fetchAppointments();
       
     } catch (error) {
       setLoading(false);
-      Alert.alert("Erro", "Não foi possível cancelar.");
+      if (!isSessionExpired(error)) Alert.alert("Erro", apiErrorMessage(error, "Não foi possível cancelar.", { notFound: "Agendamento não encontrado. Atualize sua agenda." }));
     }
   }
 

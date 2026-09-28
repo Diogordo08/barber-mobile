@@ -5,7 +5,7 @@ import { Home, Calendar, User, Crown } from 'lucide-react-native';
 import { useTheme } from '../../src/contexts/ThemeContext';
 
 export default function TabLayout() {
-  const { theme, isDark } = useTheme();
+  const { theme } = useTheme();
 
   return (
     <Tabs

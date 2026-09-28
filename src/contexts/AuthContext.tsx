@@ -1,7 +1,8 @@
-import React, { createContext, useContext, useState, useEffect, ReactNode, useCallback } from 'react';
+import React, { createContext, useContext, useState, useEffect, ReactNode, useCallback, useRef } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { User, AuthContextType, Barbershop, Subscription } from '../types';
-import { api, apiInstance } from '../services/api';
+import { Alert } from 'react-native';
+import { User, Barbershop, Subscription } from '../types';
+import { api, apiInstance, apiErrorMessage, isSessionExpired } from '../services/api';
 
 interface AuthContextProps {
   user: User | null;
@@ -27,6 +28,30 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loadingSubscription, setLoadingSubscription] = useState(true);
   const [loading, setLoading] = useState(true);
 
+  const sessionVersion = useRef(0);
+
+  const clearSession = useCallback(async () => {
+    sessionVersion.current++;
+    delete apiInstance.defaults.headers.common.Authorization;
+    setUser(null);
+    setSubscription(null);
+    setLoadingSubscription(false);
+    await AsyncStorage.multiRemove(['@BarberSaaS:user', '@BarberSaaS:token']);
+  }, []);
+
+  useEffect(() => {
+    const interceptor = apiInstance.interceptors.response.use(response => response, async error => {
+      const authorization = error.config?.headers?.Authorization;
+      if (isSessionExpired(error) && authorization &&
+          authorization === apiInstance.defaults.headers.common.Authorization &&
+          !['/login', '/register', '/logout'].includes(error.config?.url)) {
+        await clearSession().catch(() => {});
+      }
+      return Promise.reject(error);
+    });
+    return () => apiInstance.interceptors.response.eject(interceptor);
+  }, [clearSession]);
+
   function isValidStoredShop(data: any): data is Barbershop {
     return !!data && typeof data === 'object' && typeof data.slug === 'string' && data.slug.trim().length > 0;
   }
@@ -45,11 +70,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           // Injeta o token recuperado direto no Axios
           apiInstance.defaults.headers.common['Authorization'] = `Bearer ${storedToken}`;
           setUser(JSON.parse(storedUser));
-          // Busca assinatura em background
-          api.getSubscription()
-            .then(setSubscription)
-            .catch(() => setSubscription(null))
-            .finally(() => setLoadingSubscription(false));
+          const version = sessionVersion.current;
+          api.getUser().then(async freshUser => {
+            if (version !== sessionVersion.current) return;
+            await AsyncStorage.setItem('@BarberSaaS:user', JSON.stringify(freshUser));
+            if (version === sessionVersion.current) setUser(freshUser);
+          }).catch(() => {}); // Offline mantém o cache; o interceptor trata 401.
+
         } else {
           setLoadingSubscription(false);
         }
@@ -83,7 +110,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         }
 
       } catch (error) {
-        console.log('Erro ao carregar dados', error);
+        await clearSession().catch(() => {});
       } finally {
         setLoading(false);
       }
@@ -94,15 +121,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   // Função auxiliar para salvar sessão
   async function handleSession(user: User, accessToken: string) {
-    // 1. Configura Header (Imediato)
-    apiInstance.defaults.headers.common['Authorization'] = `Bearer ${accessToken}`;
-    
-    // 2. Atualiza Estado
+    if (!user?.id || !accessToken) throw new Error('Resposta de autenticação inválida.');
+    await AsyncStorage.multiSet([
+      ['@BarberSaaS:token', accessToken],
+      ['@BarberSaaS:user', JSON.stringify(user)],
+    ]);
+    sessionVersion.current++;
+    apiInstance.defaults.headers.common.Authorization = 'Bearer ' + accessToken;
     setUser(user);
-
-    // 3. Persiste no Disco
-    await AsyncStorage.setItem('@BarberSaaS:token', accessToken);
-    await AsyncStorage.setItem('@BarberSaaS:user', JSON.stringify(user));
   }
 
   // 2. Login
@@ -117,18 +143,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       await handleSession(user, access_token);
       
     } catch (error: any) {
-      console.error("Erro no login:", error);
-      const status = error.response?.status;
-      let message: string;
-      if (status === 429) {
-        message = 'Muitas tentativas. Aguarde 1 minuto e tente novamente.';
-      } else {
-        message =
-          error.response?.data?.errors?.email?.[0] ||
-          error.response?.data?.message ||
-          'Credenciais inválidas.';
-      }
-      throw new Error(message);
+      throw new Error(apiErrorMessage(error, 'E-mail ou senha inválidos. Tente novamente.'));
     }
   }
 
@@ -143,53 +158,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       await handleSession(user, access_token); // Já loga o usuário direto
 
     } catch (error: any) {
-      console.error("Erro no cadastro:", error.response?.data || error.message);
-      
-      // Tratamento de erros de validação do Laravel
-      if (error.response?.data?.errors) {
-        const errors = error.response.data.errors;
-        const firstErrorKey = Object.keys(errors)[0];
-        const firstErrorMessage = errors[firstErrorKey][0];
-        throw new Error(firstErrorMessage);
-      }
-      
-      const message = error.response?.data?.message || 'Falha ao criar conta.';
-      throw new Error(message);
+      throw new Error(apiErrorMessage(error, 'Não foi possível criar sua conta. Tente novamente.'));
     }
   }
 
-  // 4. Logout
+  // A falha na revogação remota não impede a saída local.
   const signOut = useCallback(async () => {
-    delete apiInstance.defaults.headers.common['Authorization'];
-    setUser(null);
-    setShop(null);
-    setSubscription(null);
-    setLoadingSubscription(false);
-    
-    await AsyncStorage.multiRemove([
-      '@BarberSaaS:user', 
-      '@BarberSaaS:token',
-      '@BarberSaaS:shop'
-    ]);
-  }, []);
-
-  // Interceptor de Erro 401
-  useEffect(() => {
-    const responseInterceptor = apiInstance.interceptors.response.use(
-      (response) => response,
-      async (error) => {
-        if (error.response?.status === 401 && !error.config.url?.includes('/login')) {
-          console.log('🚨 Sessão expirada. Deslogando...');
-          await signOut();
-        }
-        return Promise.reject(error);
-      }
-    );
-
-    return () => {
-      apiInstance.interceptors.response.eject(responseInterceptor);
-    };
-  }, [signOut]);
+    const authorization = apiInstance.defaults.headers.common.Authorization;
+    if (typeof authorization === 'string') void api.logout(authorization).catch(() => {});
+    await clearSession().catch(() => {});
+  }, [clearSession]);
 
   // 5. Atualizar Usuário
   async function updateUser(data: Partial<User>) {
@@ -202,22 +180,30 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setUser(updatedUserFromApi);
       await AsyncStorage.setItem('@BarberSaaS:user', JSON.stringify(updatedUserFromApi));
     } catch (error) {
-      throw new Error("Erro ao atualizar perfil.");
+      throw error;
     }
   }
 
   // 6. Atualizar Assinatura (chamado após checkout aprovado)
   async function refreshSubscription() {
     setLoadingSubscription(true);
+    const version = sessionVersion.current;
     try {
       const sub = await api.getSubscription();
-      setSubscription(sub);
-    } catch {
-      setSubscription(null);
+      if (version === sessionVersion.current) setSubscription(sub);
+    } catch (error) {
+      // Preserva a assinatura conhecida durante falhas temporárias.
+      if (version === sessionVersion.current && !isSessionExpired(error)) {
+        Alert.alert('Assinatura', apiErrorMessage(error, 'Não foi possível consultar sua assinatura. Tente novamente.'));
+      }
     } finally {
-      setLoadingSubscription(false);
+      if (version === sessionVersion.current) setLoadingSubscription(false);
     }
   }
+
+  useEffect(() => {
+    if (user?.id) void refreshSubscription();
+  }, [user?.id]);
 
   async function selectShop(data: Barbershop) {
     if (!isValidStoredShop(data)) {

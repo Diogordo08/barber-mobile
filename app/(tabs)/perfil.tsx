@@ -12,7 +12,7 @@ import {
 } from 'lucide-react-native';
 import { useAuth } from '../../src/contexts/AuthContext';
 import { useTheme } from '../../src/contexts/ThemeContext';
-import { api } from '../../src/services/api';
+import { api, apiErrorMessage, isSessionExpired } from '../../src/services/api';
 
 type ReportType = 'bug' | 'suggestion' | 'other';
 
@@ -73,8 +73,8 @@ export default function ProfileScreen() {
       await updateUser({ name, email });
       setEditVisible(false);
       Alert.alert('Sucesso', 'Dados atualizados com sucesso!');
-    } catch {
-      Alert.alert('Erro', 'Não foi possível salvar as alterações.');
+    } catch (error) {
+      if (!isSessionExpired(error)) Alert.alert('Erro', apiErrorMessage(error, 'Não foi possível salvar as alterações.'));
     } finally {
       setSaving(false);
     }
@@ -110,13 +110,7 @@ export default function ProfileScreen() {
       setReportVisible(false);
       Alert.alert('Enviado!', 'Recebemos o seu reporte. Obrigado pelo feedback!');
     } catch (error: any) {
-      const status = error?.response?.status;
-      console.error('[createReport] erro:', status, error?.response?.data);
-      if (status === 429) {
-        Alert.alert('Limite atingido', 'Muitos reportes em pouco tempo. Aguarde alguns minutos.');
-      } else {
-        Alert.alert('Erro', 'Não foi possível enviar o reporte. Tente novamente.');
-      }
+      if (!isSessionExpired(error)) Alert.alert('Erro', apiErrorMessage(error, 'Não foi possível enviar o reporte. Tente novamente.', { rateLimit: 'Muitos envios em pouco tempo. Aguarde alguns minutos.' }));
     } finally {
       setSending(false);
     }
@@ -132,8 +126,7 @@ export default function ProfileScreen() {
           text: "Sair", 
           style: "destructive", 
           onPress: () => {
-            signOut();
-            router.replace('/login');
+            void signOut();
           } 
         }
       ]

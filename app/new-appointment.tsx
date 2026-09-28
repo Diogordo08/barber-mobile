@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Image, ActivityIndicator, Alert } from 'react-native';
 import { useRouter, useFocusEffect } from 'expo-router'; 
 import { ArrowLeft, Scissors, User, Calendar, Clock, CheckCircle, ChevronRight, AlertCircle } from 'lucide-react-native';
-import { api, storageUrl } from '../src/services/api';
+import { api, storageUrl, apiErrorMessage, isSessionExpired } from '../src/services/api';
 import { useTheme } from '../src/contexts/ThemeContext';
 import { useAuth } from '../src/contexts/AuthContext'; 
 import { Barber, ServiceItem } from '../src/types';
@@ -38,7 +38,7 @@ export default function NewAppointment() {
           setBarbers(barbersData);
           setServices(servicesData);
         } catch (error) {
-          Alert.alert("Erro", "Falha ao carregar dados da barbearia.");
+          if (!isSessionExpired(error)) Alert.alert("Erro", apiErrorMessage(error, "Falha ao carregar dados da barbearia."));
         } finally {
           setLoading(false);
         }
@@ -47,47 +47,21 @@ export default function NewAppointment() {
     }, [shop])
   );
 
-  // Busca horários dinâmicos
+  // Descarta respostas de uma seleção anterior.
   useEffect(() => {
+    let active = true;
     if (step === 3 && selectedDate && selectedBarber && selectedService && shop?.slug) {
       setSlots([]);
-      setLoadingSlots(true); // <--- Começa a carregar
-      
+      setSelectedTime('');
+      setLoadingSlots(true);
       api.getAvailableSlots(shop.slug, selectedDate, selectedBarber.id, selectedService.id)
-        .then(data => {
-            // Filtra horários já passados quando a data selecionada é hoje
-            const todayStr = (() => {
-              const t = new Date();
-              return `${t.getFullYear()}-${String(t.getMonth() + 1).padStart(2, '0')}-${String(t.getDate()).padStart(2, '0')}`;
-            })();
-            if (selectedDate === todayStr) {
-              const now = new Date();
-              const nowMinutes = now.getHours() * 60 + now.getMinutes() + 15; // 15min de margem
-              data = data.filter((slot: string) => {
-                const [h, m] = slot.split(':').map(Number);
-                return h * 60 + m > nowMinutes;
-              });
-            }
-            setSlots(data);
+        .then(data => { if (active) setSlots(data); })
+        .catch(error => {
+          if (active && !isSessionExpired(error)) Alert.alert('Horários', apiErrorMessage(error, 'Não foi possível buscar os horários. Tente novamente.'));
         })
-        .catch(err => {
-            const status = err.response?.status;
-            const msg = err.response?.data?.message || err.message || 'Erro de rede';
-            console.log(`[Slots] ERRO [${status}]:`, msg, JSON.stringify(err.response?.data));
-            setSlots([]);
-            if (!status) {
-              Alert.alert(
-                'Erro de conexão',
-                'Não foi possível buscar os horários.\n\nSe estiver testando pelo navegador, use o Expo Go no celular — o browser bloqueia requisições por CORS.'
-              );
-            } else if (status !== 404) {
-              Alert.alert('Erro ao buscar horários', `[${status}] ${msg}`);
-            }
-        })
-        .finally(() => {
-            setLoadingSlots(false);
-        });
+        .finally(() => { if (active) setLoadingSlots(false); });
     }
+    return () => { active = false; };
   }, [selectedDate, selectedBarber, selectedService, step, shop?.slug]);
 
   const generateNextDays = () => {
@@ -121,7 +95,7 @@ export default function NewAppointment() {
   }
 
   async function handleConfirm() {
-    if (!shop?.slug || !user) return;
+    if (submitting || !shop?.slug || !user || !selectedBarber || !selectedService || !selectedDate || !selectedTime) return;
 
     setSubmitting(true);
     try {
@@ -150,20 +124,12 @@ export default function NewAppointment() {
       });
 
     } catch (error: any) {
-      console.log(error.response?.data);
-      
-      // Tratamento de erro específico do Backend
-      let msg = "Falha ao agendar.";
-      if (error.response?.data?.message) {
-        msg = error.response.data.message;
-        
-        // Se o erro for de limite de agendamentos (monthly_limit)
-        if (msg.includes('limit')) {
-            msg = "Você atingiu o limite de agendamentos do seu plano.";
-        }
+      if (!isSessionExpired(error)) Alert.alert('Não foi possível agendar', apiErrorMessage(error, 'Não foi possível agendar. Tente novamente.', { validation: 'Este horário não está mais disponível. Escolha outro horário.' }));
+      if (error.response?.status === 422) {
+        setSelectedTime('');
+        setStep(3);
       }
-      
-      Alert.alert("Não foi possível agendar", msg);
+    } finally {
       setSubmitting(false);
     }
   }
@@ -220,8 +186,7 @@ export default function NewAppointment() {
               <View style={{ flex: 1 }}>
                 <Text style={[styles.cardTitle, { color: theme.text }]}>{service.name}</Text>
                 <Text style={[styles.cardSubtitle, { color: theme.textSecondary }]}>
-                  {/* @ts-ignore */}
-                  {service.duration_minutes || service.durationMinutes} min • R$ {Number(service.price).toFixed(2)}
+                  {service.duration_minutes} min • R$ {Number(service.price).toFixed(2)}
                 </Text>
               </View>
               {selectedService?.id === service.id && <CheckCircle color={theme.primary} size={20} />}

@@ -6,7 +6,7 @@ import {
 import { WebView } from 'react-native-webview';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { ArrowLeft, CreditCard, QrCode, X } from 'lucide-react-native';
-import { api } from '../../src/services/api';
+import { api, PAYMENTS_DISABLED_MESSAGE } from '../../src/services/api';
 import { useTheme } from '../../src/contexts/ThemeContext';
 import { useAuth } from '../../src/contexts/AuthContext';
 import { Plan } from '../../src/types';
@@ -142,7 +142,21 @@ const bm = StyleSheet.create({
   webViewHidden: { height: 0, opacity: 0 },
 });
 
+// O checkout original fica preservado, mas nunca é montado nesta versão.
 export default function CheckoutScreen() {
+  const router = useRouter();
+  const { theme } = useTheme();
+  return (
+    <View style={{ flex: 1, justifyContent: 'center', padding: 24, backgroundColor: theme.background }}>
+      <Text style={{ color: theme.text, textAlign: 'center', marginBottom: 24 }}>{PAYMENTS_DISABLED_MESSAGE}</Text>
+      <TouchableOpacity onPress={() => router.replace('/(tabs)/plans')}>
+        <Text style={{ color: theme.primary, textAlign: 'center' }}>Voltar aos planos</Text>
+      </TouchableOpacity>
+    </View>
+  );
+}
+
+export function LegacyCheckoutScreen() {
   const { id } = useLocalSearchParams();
   const router = useRouter();
   const { theme } = useTheme();
@@ -221,7 +235,6 @@ export default function CheckoutScreen() {
     } catch (error: any) {
       const data = error.response?.data;
       const status = error.response?.status;
-      console.log(`[PIX] ERRO [${status}]:`, JSON.stringify(data));
       const msg = data?.message ||
         (data?.errors ? Object.values(data.errors as Record<string, string[]>).flat().join('\n') : null) ||
         `Erro ${status ?? 'de conexão'}.`;
@@ -230,8 +243,6 @@ export default function CheckoutScreen() {
   }
 
   async function handleCardToken(token: string, installments: number): Promise<void> {
-    console.log('[Cartão] Token recebido:', token ? `${token.substring(0, 16)}...` : 'NULO/VAZIO');
-    console.log('[Cartão] Payload →', JSON.stringify({ plan_id: plan!.id, payment_method: 'card', card_token: !!token, installments }));
     if (!token) {
       throw new Error('Token do cartão não gerado. Verifique os dados e tente novamente.');
     }
@@ -243,7 +254,6 @@ export default function CheckoutScreen() {
         card_token: token,
         installments,
       });
-      console.log('[Cartão] Resposta backend:', JSON.stringify(result));
       setShowBricks(false);
       if (result?.payment_status === 'approved') {
         Alert.alert('Aprovado! ✅', 'Sua assinatura está ativa.', [
@@ -260,7 +270,6 @@ export default function CheckoutScreen() {
     } catch (error: any) {
       const data = error.response?.data;
       const status = error.response?.status;
-      console.log(`[Cartão] ERRO [${status}]:`, JSON.stringify(data));
       const msg = data?.message && data.message !== 'Server Error'
         ? data.message
         : status === 500

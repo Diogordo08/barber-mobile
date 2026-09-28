@@ -1,19 +1,19 @@
-﻿import React, { useEffect, useState } from 'react';
+﻿import React, { useRef, useState } from 'react';
 import { 
   View, Text, StyleSheet, TouchableOpacity, ImageBackground, StatusBar, 
   Modal, TextInput, ActivityIndicator, Alert, KeyboardAvoidingView, Platform 
 } from 'react-native';
 import { useRouter } from 'expo-router';
-import { QrCode, Keyboard, ArrowRight, X, ZapOff } from 'lucide-react-native';
+import { QrCode, Keyboard, ArrowRight, X } from 'lucide-react-native';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import { useTheme } from '../src/contexts/ThemeContext';
 import { useAuth } from '../src/contexts/AuthContext';
-import { api } from '../src/services/api';
+import { api, apiErrorMessage } from '../src/services/api';
 
 export default function LandingScreen() {
   const router = useRouter();
   const { theme } = useTheme();
-  const { selectShop, signOut } = useAuth();
+  const { selectShop } = useAuth();
 
   const [modalVisible, setModalVisible] = useState(false);
   const [scannerVisible, setScannerVisible] = useState(false);
@@ -23,28 +23,32 @@ export default function LandingScreen() {
 
   const [permission, requestPermission] = useCameraPermissions();
 
-  useEffect(() => {
-    signOut().catch((error) => {
-      console.log('Erro ao resetar sessão na welcome:', error);
-    });
-  }, [signOut]);
+  const requestInFlight = useRef(false);
 
   async function enterWithSlug(slugValue: string) {
-    if (!slugValue.trim()) return;
+    const normalized = slugValue.trim().toLowerCase();
+    if (requestInFlight.current) return;
+    if (!/^[a-z0-9-]+$/.test(normalized)) {
+      setScanning(false);
+      Alert.alert('Código inválido', 'Informe o código da barbearia.');
+      return;
+    }
+    requestInFlight.current = true;
     setLoading(true);
     try {
-      const shopData = await api.getBarbershop(slugValue.trim().toLowerCase());
+      const shopData = await api.getBarbershop(normalized);
       if (shopData && shopData.id) {
         await selectShop(shopData);
         setModalVisible(false);
         setScannerVisible(false);
         router.push('/login');
       } else {
-        Alert.alert("Não encontrada", "Nenhuma barbearia encontrada com este código.");
+        Alert.alert("Não encontrada", "Barbearia não encontrada.");
       }
     } catch (error) {
-      Alert.alert("Erro", "Falha ao buscar barbearia. Verifique o código.");
+      Alert.alert("Erro", apiErrorMessage(error, "Não foi possível buscar a barbearia. Tente novamente.", { notFound: "Barbearia não encontrada." }));
     } finally {
+      requestInFlight.current = false;
       setLoading(false);
       setScanning(false);
     }
@@ -62,13 +66,13 @@ export default function LandingScreen() {
   }
 
   function handleBarCodeScanned({ data }: { data: string }) {
-    if (scanning) return;
+    if (scanning || requestInFlight.current) return;
     setScanning(true);
 
     // O QR Code pode conter a URL completa ou apenas o slug
     // Ex: "https://barbearia-api.on-forge.com/minha-barbearia" ou "minha-barbearia"
     let extractedSlug = data.trim();
-    const urlMatch = data.match(/\/([^/]+)\/?$/);
+    const urlMatch = data.split(/[?#]/)[0].match(/\/([^/]+)\/?$/);
     if (urlMatch) extractedSlug = urlMatch[1];
 
     enterWithSlug(extractedSlug);
@@ -143,7 +147,7 @@ export default function LandingScreen() {
           {loading && (
             <View style={styles.scannerLoading}>
               <ActivityIndicator size="large" color={theme.primary} />
-              <Text style={{ color: 'white', marginTop: 10 }}>Buscando barbearia...</Text>
+              <Text style={{ color: 'white', marginTop: 10 }}>Buscando barbearia. O primeiro acesso pode demorar um pouco.</Text>
             </View>
           )}
         </View>
@@ -182,6 +186,7 @@ export default function LandingScreen() {
               onChangeText={setSlug}
             />
 
+            {loading && <Text style={[styles.modalLabel, { color: theme.textSecondary }]}>Conectando... O primeiro acesso pode demorar um pouco.</Text>}
             <TouchableOpacity 
               style={[styles.confirmBtn, { backgroundColor: theme.primary }]}
               onPress={() => enterWithSlug(slug)}

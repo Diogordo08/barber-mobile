@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, Alert } from 'react-native';
 import { useRouter } from 'expo-router';
 import { ArrowLeft, Check, Crown } from 'lucide-react-native';
-import { api } from '../src/services/api';
+import { api, apiErrorMessage, isSessionExpired, PAYMENTS_DISABLED_MESSAGE } from '../src/services/api';
 import { useAuth } from '../src/contexts/AuthContext';
 import { useTheme } from '../src/contexts/ThemeContext';
 import { Plan } from '../src/types';
@@ -22,7 +22,7 @@ export default function PlansScreen() {
         const data = await api.getPlans(shop.slug);
         setPlans(data);
       } catch (error) {
-        Alert.alert("Erro", "Não foi possível carregar os planos.");
+        if (!isSessionExpired(error)) Alert.alert("Erro", apiErrorMessage(error, "Não foi possível carregar os planos."));
       } finally {
         setLoading(false);
       }
@@ -30,15 +30,15 @@ export default function PlansScreen() {
     fetchPlans();
   }, [shop]);
 
-  function handleSelectPlan(plan: Plan) {
+  function handleSelectPlan(_plan: Plan) {
     if (!user) {
       Alert.alert("Login necessário", "Você precisa entrar para assinar um plano.", [
         { text: "Fazer Login", onPress: () => router.push('/login') }
       ]);
       return;
     }
-    // Redireciona para o checkout com o ID do plano
-    router.push(`/checkout/${plan.id}`);
+    // Pagamentos indisponíveis na versão de portfólio
+    Alert.alert('Versão demonstrativa', PAYMENTS_DISABLED_MESSAGE);
   }
 
   if (loading) {

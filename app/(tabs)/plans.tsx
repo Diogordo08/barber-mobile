@@ -1,19 +1,19 @@
 import React, { useState, useCallback } from 'react';
 import { 
   View, Text, StyleSheet, ScrollView, TouchableOpacity, 
-  ActivityIndicator, ImageBackground, StatusBar, RefreshControl 
+  ActivityIndicator, ImageBackground, StatusBar, RefreshControl, Alert
 } from 'react-native';
 import { useRouter, useFocusEffect } from 'expo-router';
-import { Crown, Check, CreditCard, Calendar, Star, AlertCircle } from 'lucide-react-native';
+import { Crown, Check, Calendar } from 'lucide-react-native';
 import { useAuth } from '../../src/contexts/AuthContext';
 import { useTheme } from '../../src/contexts/ThemeContext';
-import { api } from '../../src/services/api';
+import { api, apiErrorMessage, isSessionExpired, PAYMENTS_DISABLED_MESSAGE } from '../../src/services/api';
 import { Plan } from '../../src/types';
 
 export default function PlansTab() {
   const router = useRouter();
   const { theme } = useTheme();
-  const { shop, user, subscription } = useAuth();
+  const { shop, user, subscription, refreshSubscription } = useAuth();
 
   const [loading, setLoading] = useState(true);
   const [plans, setPlans] = useState<Plan[]>([]);
@@ -27,7 +27,7 @@ export default function PlansTab() {
         setPlans(plansData);
       }
     } catch (error) {
-      console.log("Erro ao carregar planos", error);
+      if (!isSessionExpired(error)) Alert.alert("Planos", apiErrorMessage(error, "Não foi possível carregar os planos."));
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -37,12 +37,12 @@ export default function PlansTab() {
   useFocusEffect(
     useCallback(() => {
       loadData();
-    }, [shop])
+    }, [shop, subscription])
   );
 
-  const handleSubscribe = (plan: Plan) => {
+  const handleSubscribe = (_plan: Plan) => {
     if (!user) return router.push('/login');
-    router.push(`/checkout/${plan.id}`);
+    Alert.alert('Versão demonstrativa', PAYMENTS_DISABLED_MESSAGE);
   };
 
   const renderHeader = (title: string, subtitle: string) => (
@@ -81,7 +81,7 @@ export default function PlansTab() {
         <StatusBar barStyle="light-content" translucent backgroundColor="transparent" />
         <ScrollView 
           contentContainerStyle={{ paddingBottom: 40 }}
-          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); loadData(); }} tintColor={theme.primary} />}
+          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={async () => { setRefreshing(true); await refreshSubscription(); await loadData(); }} tintColor={theme.primary} />}
         >
           {renderHeader("Seu Clube VIP", "Você é parte da elite.")}
 
@@ -136,7 +136,7 @@ export default function PlansTab() {
 
       <ScrollView 
         contentContainerStyle={{ paddingBottom: 100 }}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); loadData(); }} tintColor={theme.primary} />}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={async () => { setRefreshing(true); await refreshSubscription(); await loadData(); }} tintColor={theme.primary} />}
         showsVerticalScrollIndicator={false}
       >
         {renderHeader("Planos Exclusivos", "Economia inteligente para o seu estilo.")}

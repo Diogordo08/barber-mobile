@@ -1,9 +1,31 @@
 import axios from 'axios';
-import AsyncStorage from '@react-native-async-storage/async-storage';
-import { User, Barbershop, Barber, ServiceItem, Appointment } from '../types'; 
+import { User, Barbershop, Barber, ServiceItem, Appointment, Plan, Subscription } from '../types';
 
-const BASE_URL = 'https://www.barbereasy.com.br/api';
-const STORAGE_URL = 'https://www.barbereasy.com.br/storage';
+const SERVER_URL = 'https://barbearia-api-xxvv.onrender.com';
+const BASE_URL = `${SERVER_URL}/api`;
+const STORAGE_URL = `${SERVER_URL}/storage`;
+export const PAYMENTS_DISABLED_MESSAGE = 'Pagamentos estão desativados nesta versão demonstrativa.';
+
+export function apiErrorMessage(error: unknown, fallback: string, options: { notFound?: string; rateLimit?: string; validation?: string } = {}): string {
+  if (!axios.isAxiosError(error)) return fallback;
+  const status = error.response?.status;
+  if (!error.response) return 'Não foi possível conectar ao servidor. Tente novamente.';
+  if (status === 403) return 'Esta ação não está disponível nesta conta demonstrativa.';
+  if (status === 429) return options.rateLimit || 'Muitas tentativas em pouco tempo. Aguarde alguns instantes.';
+  if (status === 404) return options.notFound || 'Recurso não encontrado. Atualize e tente novamente.';
+  if (status === 422) {
+    const data = error.response?.data;
+    const messages = Object.values(data?.errors || {}).flat();
+    const message = messages[0] || data?.message;
+    if (typeof message === 'string' && message.length <= 300 && !/[{}<>]|SQLSTATE|Exception|Stack trace|axios/i.test(message)) return message;
+    return options.validation || fallback;
+  }
+  return fallback;
+}
+
+export function isSessionExpired(error: unknown): boolean {
+  return axios.isAxiosError(error) && error.response?.status === 401;
+}
 
 /** Converte caminho relativo retornado pelo backend (ex: "avatars/foo.jpg") em URL completa. */
 export function storageUrl(path: string | null | undefined): string | undefined {
@@ -15,30 +37,17 @@ export function storageUrl(path: string | null | undefined): string | undefined 
 // Exportando para usar no AuthContext
 export const apiInstance = axios.create({
   baseURL: BASE_URL,
+  timeout: 90000,
   headers: {
     'Content-Type': 'application/json',
     'Accept': 'application/json',
   },
 });
 
-// 👇 INTERCEPTOR MAIS INTELIGENTE
-apiInstance.interceptors.request.use(async (config) => {
-  // 1. Se o Header já tiver Authorization (colocado pelo Login), NÃO mexe!
-  // Isso evita o delay do AsyncStorage e o erro 401 na transição imediata.
-  if (config.headers.Authorization) {
-    return config;
-  }
-
-  // 2. Só busca no disco se não tiver header (ex: ao recarregar o app)
-  const token = await AsyncStorage.getItem('@BarberSaaS:token');
-  if (token) {
-    config.headers.Authorization = `Bearer ${token}`;
-  }
-  
-  return config;
-});
+// AuthContext restaura o header antes de liberar as telas protegidas.
 
 export const api = {
+  getUser: async (): Promise<User> => (await apiInstance.get('/user')).data,
   
   // --- AUTENTICAÇÃO ---
   login: async (credentials: any) => {
@@ -75,9 +84,7 @@ export const api = {
   // --- AGENDAMENTOS ---
   getAvailableSlots: async (slug: string, date: string, barberId: number, serviceId: number) => {
     const params = { date, barber_id: barberId, service_id: serviceId };
-    console.log(`[Slots] GET /${slug}/slots`, params);
     const response = await apiInstance.get(`/${slug}/slots`, { params });
-    console.log(`[Slots] Resposta:`, JSON.stringify(response.data));
     // Suporta tanto array direto quanto { data: [...] } (Laravel Resource)
     const raw = response.data;
     return Array.isArray(raw) ? raw : (raw?.data ?? []);
@@ -98,7 +105,7 @@ export const api = {
     return response.data;
   },
 
-getMyAppointments: async () => {
+  getMyAppointments: async (): Promise<Appointment[]> => {
     const response = await apiInstance.get('/appointments');
     return response.data; // Retorna direto o array que o Controller mandou
   },
@@ -109,24 +116,20 @@ getMyAppointments: async () => {
   },
 
   // --- ASSINATURAS ---
-  getSubscription: async () => {
+  getSubscription: async (): Promise<Subscription | null> => {
     try {
       const response = await apiInstance.get('/user/subscription');
       return response.data;
     } catch (error) {
-      return null;
+      if (axios.isAxiosError(error) && error.response?.status === 404) return null;
+      throw error;
     }
   },
 
   // Busca os planos da barbearia atual
-  getPlans: async (slug: string) => {
-    try {
-      const response = await apiInstance.get(`/${slug}/plans`);
-      return response.data;
-    } catch (error) {
-      console.log("Erro ao buscar planos:", error);
-      return []; // Retorna array vazio para não quebrar a tela
-    }
+  getPlans: async (slug: string): Promise<Plan[]> => {
+    const response = await apiInstance.get(`/${slug}/plans`);
+    return response.data;
   },
 
   // Realiza a assinatura
@@ -153,8 +156,8 @@ getMyAppointments: async () => {
   },
 
   // Revoga o token atual
-  logout: async () => {
-    const response = await apiInstance.post('/logout');
+  logout: async (authorization: string) => {
+    const response = await apiInstance.post('/logout', undefined, { headers: { Authorization: authorization } });
     return response.data;
   },
 };

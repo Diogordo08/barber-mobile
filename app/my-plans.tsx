@@ -1,8 +1,8 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator, Alert, ScrollView, Platform, StatusBar } from 'react-native';
 import { useRouter } from 'expo-router';
 import { ArrowLeft, CreditCard, Calendar, XCircle, RefreshCw, CheckCircle, Crown } from 'lucide-react-native';
-import { api } from '../src/services/api';
+import { api, apiErrorMessage, isSessionExpired } from '../src/services/api';
 import { useTheme } from '../src/contexts/ThemeContext';
 import { useAuth } from '../src/contexts/AuthContext';
 import { Plan } from '../src/types';
@@ -12,20 +12,27 @@ const TOP_PADDING = Platform.OS === 'ios' ? 60 : (StatusBar.currentHeight ?? 24)
 export default function MyPlan() {
   const router = useRouter();
   const { theme } = useTheme();
-  const { shop, subscription } = useAuth();
+  const { shop, subscription, loadingSubscription, refreshSubscription } = useAuth();
   
+  const canceling = useRef(false);
   const [loading, setLoading] = useState(true);
   const [planDetails, setPlanDetails] = useState<Plan | null>(null);
 
   useEffect(() => {
-    loadData();
-  }, [subscription]);
+    if (!loadingSubscription && !canceling.current) void loadData();
+  }, [subscription, loadingSubscription, shop?.slug]);
 
   async function loadData() {
     if (!subscription) {
+      setPlanDetails(null);
       setLoading(false);
       Alert.alert("Aviso", "Você não possui um plano ativo.");
-      router.back();
+      router.replace('/(tabs)/plans');
+      return;
+    }
+    if (subscription.plan) {
+      setPlanDetails(subscription.plan);
+      setLoading(false);
       return;
     }
     if (!shop?.slug) { setLoading(false); return; }
@@ -34,7 +41,7 @@ export default function MyPlan() {
       const details = plans.find((p: Plan) => p.id === subscription.plan_id);
       setPlanDetails(details || subscription.plan || null);
     } catch (err) {
-      console.log(err);
+      if (!isSessionExpired(err)) Alert.alert("Assinatura", apiErrorMessage(err, "Não foi possível carregar sua assinatura."));
     } finally {
       setLoading(false);
     }
@@ -50,14 +57,17 @@ export default function MyPlan() {
           text: "Sim, Cancelar", 
           style: "destructive",
           onPress: async () => {
+            canceling.current = true;
             setLoading(true);
             try {
               await api.cancelSubscription();
+              await refreshSubscription();
               Alert.alert("Cancelado", "Sua assinatura foi cancelada com sucesso.");
-              router.back();
-            } catch {
+              router.replace('/(tabs)/plans');
+            } catch (error) {
+              canceling.current = false;
               setLoading(false);
-              Alert.alert("Erro", "Não foi possível cancelar. Tente novamente.");
+              if (!isSessionExpired(error)) Alert.alert("Erro", apiErrorMessage(error, "Não foi possível cancelar. Tente novamente.", { notFound: "Nenhuma assinatura ativa para cancelar." }));
             }
           }
         }
@@ -70,7 +80,6 @@ export default function MyPlan() {
     router.push('/plans');
   }
 
-  const { expires_at, payment_method, plan_id } = subscription ?? {};
 
   if (loading) return <View style={styles.center}><ActivityIndicator color={theme.primary} /></View>;
   if (!planDetails || !subscription) return null;

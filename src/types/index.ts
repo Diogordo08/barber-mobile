@@ -1,5 +1,3 @@
-import { User } from './Auth';
-
 export * from './Auth';
 
 export interface OpeningHour {
@@ -19,7 +17,7 @@ export interface Barbershop {
   address: string | null;
   whatsapp: string;
   /** Chave pública MercadoPago da barbearia. Null = MP não configurado → desabilitar cartão. */
-  mp_public_key: string | null;
+  mp_public_key?: string | null;
   opening_hours?: OpeningHour[];
   theme?: {
     primary: string;
